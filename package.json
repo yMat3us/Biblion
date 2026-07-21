@@ -1,0 +1,63 @@
+{
+  "name": "biblion",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "NODE_OPTIONS='--dns-result-order=ipv4first' next dev -H 0.0.0.0",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prisma:generate": "prisma generate",
+    "prisma:validate": "prisma validate",
+    "check": "npm run lint && npm run typecheck && npm run test && npm run prisma:validate",
+    "audit:prod": "npm audit --omit=dev --audit-level=moderate",
+    "check:production-env": "node scripts/check-production-env.mjs",
+    "migrate:accounts": "node --env-file-if-exists=.env scripts/migrate-to-accounts.mjs",
+    "verify:migration": "node --env-file-if-exists=.env scripts/verify-account-migration.mjs",
+    "db:studio": "prisma studio",
+    "db:push": "prisma db push",
+    "postinstall": "prisma generate",
+    "cap:sync": "CAPACITOR_REQUIRE_SERVER_URL=true node --env-file=.env ./node_modules/@capacitor/cli/bin/capacitor sync android",
+    "cap:open": "cap open android"
+  },
+  "prisma": {},
+  "dependencies": {
+    "@ai-sdk/google": "^4.0.6",
+    "@ai-sdk/openai": "^4.0.5",
+    "@ai-sdk/react": "^4.0.12",
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/cli": "^8.4.1",
+    "@capacitor/core": "^8.4.1",
+    "@prisma/client": "^6.2.0",
+    "ai": "^7.0.11",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.42.2",
+    "lucide-react": "^1.23.0",
+    "next": "16.2.10",
+    "pdf-parse": "2.4.5",
+    "prisma": "^6.2.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "tailwind-merge": "^3.6.0",
+    "zod": "^4.4.3"
+  },
+  "overrides": {
+    "postcss": "8.5.20"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.10",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitest": "4.1.10"
+  }
+}

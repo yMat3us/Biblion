@@ -1,0 +1,195 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality and web build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+      DATABASE_URL: mongodb://127.0.0.1:27017/biblion_ci
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+      TRUST_PROXY: "false"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+
+      - name: Generate Prisma Client
+        run: npm run prisma:generate
+
+      - name: Run static checks and unit tests
+        run: npm run check
+
+      - name: Validate production environment contract
+        env:
+          DATABASE_URL: mongodb+srv://ci.example.invalid/biblion
+          NEXT_PUBLIC_SITE_URL: https://biblion.example.invalid
+          TRUST_PROXY: "true"
+          AI_PROVIDER: gemini
+          GOOGLE_GENERATIVE_AI_API_KEY: ci-placeholder
+          UPSTASH_REDIS_REST_URL: https://redis.example.invalid
+          UPSTASH_REDIS_REST_TOKEN: ci-placeholder
+          CAPACITOR_SERVER_URL: https://biblion.example.invalid
+        run: npm run check:production-env
+
+      - name: Audit production dependencies
+        run: npm run audit:prod
+
+      - name: Build production bundle
+        run: npm run build
+
+  database-integration:
+    name: MongoDB migration and auth smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: "true"
+      DATABASE_URL: mongodb://127.0.0.1:27017/biblion_ci?replicaSet=rs0
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+      TRUST_PROXY: "false"
+      OWNER_USERNAME: ci_owner
+      OWNER_PASSWORD: CiOwner-Password-123!
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+
+      - name: Generate Prisma Client
+        run: npm run prisma:generate
+
+      - name: Start MongoDB replica set
+        run: docker run --detach --name biblion-mongo --publish 27017:27017 mongo@sha256:a3ba70fe8da14d155e158245fc89a9dd6adf92ae34976ebce24464a3c1573c78 --replSet rs0 --bind_ip_all
+
+      - name: Initialize MongoDB replica set
+        run: |
+          for attempt in {1..60}; do
+            if docker exec biblion-mongo mongosh --quiet --eval "db.adminCommand('ping').ok" >/dev/null 2>&1; then
+              break
+            fi
+            if [ "$attempt" -eq 60 ]; then
+              docker logs biblion-mongo
+              exit 1
+            fi
+            sleep 2
+          done
+          docker exec biblion-mongo mongosh --quiet --eval "rs.initiate({_id:'rs0',members:[{_id:0,host:'127.0.0.1:27017'}]})"
+          for attempt in {1..60}; do
+            if docker exec biblion-mongo mongosh --quiet --eval "db.hello().isWritablePrimary" | grep -q true; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 60 ]; then
+              docker logs biblion-mongo
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Push schema to disposable database
+        run: npm run db:push
+
+      - name: Seed legacy ownerless fixtures
+        run: >-
+          docker exec biblion-mongo mongosh --quiet biblion_ci --eval
+          "const now=new Date();
+          db.Sermao.insertOne({titulo:'Sermão legado',textoBase:'João 3:16',publicado:false,createdAt:now,updatedAt:now});
+          db.RevistaEBD.insertOne({titulo:'Revista legada',createdAt:now,updatedAt:now});
+          db.Configuracao.insertOne({chave:'tema',valor:'dark',createdAt:now,updatedAt:now});"
+
+      - name: Preflight account migration
+        env:
+          DRY_RUN: "true"
+          APPLY_MIGRATION: "false"
+        run: npm run migrate:accounts
+
+      - name: Apply account migration
+        env:
+          DRY_RUN: "false"
+          APPLY_MIGRATION: "true"
+          RESET_OWNER_PASSWORD: "false"
+        run: npm run migrate:accounts
+
+      - name: Verify migrated ownership and credentials
+        env:
+          REQUIRE_ALL_DATA_TARGET: "true"
+        run: npm run verify:migration
+
+      - name: Run database-backed auth and isolation smoke
+        env:
+          RUN_DB_TESTS: "true"
+          TEST_OWNER_USERNAME: ci_owner
+          TEST_OWNER_PASSWORD: CiOwner-Password-123!
+        run: node ./node_modules/vitest/vitest.mjs run tests/auth-database.integration.test.ts
+
+      - name: Stop disposable MongoDB
+        if: always()
+        run: docker rm --force biblion-mongo
+
+  android:
+    name: Android release build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Java 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install native dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+
+      - name: Prepare CI web fallback
+        run: mkdir -p out && cp public/offline.html out/index.html
+
+      - name: Synchronize Capacitor with a validated HTTPS origin
+        env:
+          CAPACITOR_REQUIRE_SERVER_URL: "true"
+          CAPACITOR_SERVER_URL: https://biblion.example.invalid
+        run: ./node_modules/.bin/cap sync android
+
+      - name: Build Android release APK with R8
+        working-directory: android
+        run: ./gradlew :app:assembleRelease --no-daemon
