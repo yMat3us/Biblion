@@ -26,10 +26,10 @@ export function buttonStyles({
   }
 
   const sizes: Record<ButtonSize, string> = {
-    sm: 'h-9 gap-1.5 rounded-[0.7rem] px-3.5 text-xs',
+    sm: 'h-11 gap-1.5 rounded-[0.7rem] px-3.5 text-xs',
     md: 'h-11 gap-2 rounded-[0.8rem] px-4 text-sm',
     lg: 'h-12 gap-2.5 rounded-[0.85rem] px-5 text-sm',
-    icon: 'h-10 w-10 rounded-[0.75rem]',
+    icon: 'h-11 w-11 rounded-[0.75rem]',
   }
 
   return cn(

@@ -83,7 +83,7 @@ export const IntelligentTextarea = forwardRef<HTMLTextAreaElement, IntelligentTe
         <div
           role="menu"
           aria-label="Ações de inteligência artificial para o texto selecionado"
-          className="absolute left-2 right-2 top-9 z-30 animate-fade-in rounded-xl border border-primary/20 bg-overlay/95 p-1.5 shadow-overlay backdrop-blur-xl sm:left-auto sm:right-2 sm:w-52"
+          className="ai-selection-menu absolute left-2 right-2 top-12 z-30 max-h-[min(22rem,50dvh)] overflow-y-auto animate-fade-in rounded-xl border border-primary/20 bg-overlay/95 p-1.5 shadow-overlay backdrop-blur-xl sm:left-auto sm:right-2 sm:w-56"
         >
           <div className="mb-1 flex items-center gap-2 border-b border-hairline px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-primary-hover">
             <Sparkles size={12} aria-hidden="true" /> Assistente de escrita

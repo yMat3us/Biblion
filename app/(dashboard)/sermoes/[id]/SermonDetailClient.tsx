@@ -12,8 +12,10 @@ import {
   Copy,
   Edit,
   Flag,
+  Globe,
   Layers3,
   Link2,
+  Lock,
   Mic,
   Target,
   Trash2,
@@ -36,6 +38,7 @@ interface Sermon {
   aplicacao?: string | null
   categoria?: string | null
   publicado: boolean
+  visibility: string
   createdAt: Date
   updatedAt: Date
 }
@@ -91,8 +94,31 @@ export function SermonDetailClient({ sermao }: { sermao: Sermon }) {
   const toast = useToast()
   const confirm = useConfirm()
   const [copied, setCopied] = useState(false)
+  const [visibility, setVisibility] = useState(sermao.visibility)
+  const [savingVisibility, setSavingVisibility] = useState(false)
   const [relatedContent, setRelatedContent] = useState<RelatedContent | null>(null)
   const [relatedStatus, setRelatedStatus] = useState<RelatedStatus>('loading')
+
+  async function setVisibilidade(next: string) {
+    if (savingVisibility || next === visibility) return
+    const anterior = visibility
+    setVisibility(next)
+    setSavingVisibility(true)
+    try {
+      const response = await fetch(`/api/sermoes/${sermao.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visibility: next }),
+      })
+      if (!response.ok) throw new Error('visibility-failed')
+      toast.success(next === 'PUBLIC' ? 'Sermão visível no seu perfil público.' : 'Sermão agora é privado.')
+    } catch {
+      setVisibility(anterior)
+      toast.error('Não foi possível alterar a visibilidade.')
+    } finally {
+      setSavingVisibility(false)
+    }
+  }
   const topics = parseTopics(sermao.topicos)
   const hasInvalidTopics = Boolean(sermao.topicos && topics.length === 0)
   const visibleTopics = topics.filter((topic) => topic.titulo || topic.conteudo)
@@ -184,6 +210,33 @@ export function SermonDetailClient({ sermao }: { sermao: Sermon }) {
           </>
         }
       />
+
+      <div className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-hairline bg-surface/60 p-3.5">
+        <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+          <Globe size={15} className="text-primary" /> Visibilidade no seu perfil
+        </span>
+        <div className="flex gap-1.5" role="group" aria-label="Visibilidade do sermão">
+          <button
+            type="button"
+            onClick={() => setVisibilidade('PRIVATE')}
+            disabled={savingVisibility}
+            aria-pressed={visibility !== 'PUBLIC'}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${visibility !== 'PUBLIC' ? 'border-primary/40 bg-primary-soft text-primary' : 'border-hairline-strong text-muted-foreground hover:text-foreground'}`}
+          >
+            <Lock size={13} /> Privado
+          </button>
+          <button
+            type="button"
+            onClick={() => setVisibilidade('PUBLIC')}
+            disabled={savingVisibility}
+            aria-pressed={visibility === 'PUBLIC'}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${visibility === 'PUBLIC' ? 'border-primary/40 bg-primary-soft text-primary' : 'border-hairline-strong text-muted-foreground hover:text-foreground'}`}
+          >
+            <Globe size={13} /> Público
+          </button>
+        </div>
+        <span className="text-xs text-subtle">{visibility === 'PUBLIC' ? 'Aparece no seu perfil público.' : 'Somente você vê este sermão.'}</span>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_15rem]">
         <article className="sermon-document">

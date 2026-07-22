@@ -161,7 +161,7 @@ export function LessonClient({ licao }: { licao: LicaoDetalhada }) {
           action={<Link href={backHref} className={buttonStyles()}>Voltar à revista</Link>}
         />
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_16rem]">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_16rem]">
           <div className="ebd-lesson-document min-w-0 space-y-5">
             {licao.objetivos && (
               <section id="objetivos" className="form-section form-section--accent scroll-mt-24">
@@ -247,8 +247,8 @@ export function LessonClient({ licao }: { licao: LicaoDetalhada }) {
             </section>
           </div>
 
-          <aside className="hidden lg:block">
-            <div className="space-y-5 lg:sticky lg:top-6">
+          <aside className="hidden xl:block">
+            <div className="space-y-5 xl:sticky xl:top-6">
               <section className="surface p-4">
                 <p className="eyebrow mb-4">Roteiro da aula</p>
                 <nav aria-label="Seções da lição" className="space-y-1">

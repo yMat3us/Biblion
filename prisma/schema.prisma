@@ -13,6 +13,14 @@ enum UserRole {
   MEMBER
 }
 
+/// Escopo de visibilidade compartilhado por todo conteúdo que pode aparecer
+/// em um perfil público. PRIVATE é o padrão seguro em qualquer criação.
+enum Visibility {
+  PRIVATE
+  FRIENDS
+  PUBLIC
+}
+
 model User {
   id                 String        @id @default(auto()) @map("_id") @db.ObjectId
   username           String
@@ -26,6 +34,10 @@ model User {
   accentColor        String        @default("violet")
   locale             String        @default("pt-BR")
   isActive           Boolean       @default(true)
+  // Identidade social pública e controles de descoberta.
+  publicId           String?       @unique
+  isSearchable       Boolean       @default(true)
+  profileVisibility  Visibility    @default(PUBLIC)
   lastLoginAt        DateTime?
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
@@ -37,8 +49,21 @@ model User {
   revistas           RevistaEBD[]
   licoes             LicaoEBD[]
   configuracoes      Configuracao[]
+  // Planos de leitura (autoria e matrículas de progresso).
+  readingPlans       ReadingPlan[]
+  planEnrollments    PlanEnrollment[]
+  // Social e comunicação.
+  friendshipsSent     Friendship[]              @relation("FriendshipRequester")
+  friendshipsReceived Friendship[]              @relation("FriendshipAddressee")
+  blocksInitiated     Block[]                   @relation("BlockBlocker")
+  blocksReceived      Block[]                   @relation("BlockBlocked")
+  conversations       ConversationParticipant[]
+  messages            Message[]
+  notifications       Notification[]            @relation("NotificationRecipient")
+  notificationsActed  Notification[]            @relation("NotificationActor")
 
   @@index([role, isActive])
+  @@index([isSearchable])
 }
 
 model UserSession {
@@ -70,25 +95,29 @@ model Sermao {
   categoria   String?
   tags        String?
   publicado   Boolean  @default(false)
+  visibility  Visibility @default(PRIVATE)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([ownerId, updatedAt])
+  @@index([visibility, updatedAt])
 }
 
 model Esboco {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  ownerId   String   @db.ObjectId
-  owner     User     @relation(fields: [ownerId], references: [id], onDelete: NoAction)
-  titulo    String
-  textoBase String?
-  conteudo  String
-  modelo    String?
-  categoria String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String     @id @default(auto()) @map("_id") @db.ObjectId
+  ownerId    String     @db.ObjectId
+  owner      User       @relation(fields: [ownerId], references: [id], onDelete: NoAction)
+  titulo     String
+  textoBase  String?
+  conteudo   String
+  modelo     String?
+  categoria  String?
+  visibility Visibility @default(PRIVATE)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
 
   @@index([ownerId, updatedAt])
+  @@index([visibility, updatedAt])
 }
 
 model Anotacao {
@@ -105,13 +134,17 @@ model Anotacao {
   tags       String[] @default([])
   fixada     Boolean  @default(false)
   cor        String   @default("default")
+  visibility Visibility @default(PRIVATE)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   @@index([ownerId, updatedAt])
   @@index([ownerId, livro, capitulo, versiculo])
+  @@index([visibility, updatedAt])
 }
 
+/// Favorito genérico e reutilizável (hinos, planos, referências bíblicas...).
+/// `tipo` discrimina o recurso e `referencia` guarda seu identificador.
 model Favorito {
   id         String   @id @default(auto()) @map("_id") @db.ObjectId
   ownerId    String   @db.ObjectId
@@ -121,7 +154,8 @@ model Favorito {
   titulo     String?
   createdAt  DateTime @default(now())
 
-  @@index([ownerId, createdAt])
+  @@unique([ownerId, tipo, referencia])
+  @@index([ownerId, tipo, createdAt])
 }
 
 model RevistaEBD {
@@ -160,11 +194,13 @@ model LicaoEBD {
   esboco      String?
   conteudoRaw String?
   arquivo     String?
+  visibility  Visibility  @default(PRIVATE)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
   @@index([ownerId, createdAt])
   @@index([ownerId, revistaId])
+  @@index([visibility, updatedAt])
 }
 
 model Configuracao {
@@ -178,4 +214,189 @@ model Configuracao {
 
   @@unique([ownerId, chave])
   @@index([ownerId, updatedAt])
+}
+
+// ===========================================================================
+// Planos de leitura (online e sociais)
+// ===========================================================================
+enum PlanSource {
+  USER
+  AI
+  OFFICIAL
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+}
+
+model ReadingPlan {
+  id          String           @id @default(auto()) @map("_id") @db.ObjectId
+  ownerId     String           @db.ObjectId
+  owner       User             @relation(fields: [ownerId], references: [id], onDelete: NoAction)
+  titulo      String
+  descricao   String?
+  categoria   String?
+  capaCor     String?
+  duracaoDias Int              @default(0)
+  visibility  Visibility       @default(PRIVATE)
+  source      PlanSource       @default(USER)
+  oficial     Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  dias        PlanDay[]
+  enrollments PlanEnrollment[]
+
+  @@index([visibility, categoria])
+  @@index([ownerId, updatedAt])
+}
+
+model PlanDay {
+  id         String      @id @default(auto()) @map("_id") @db.ObjectId
+  planId     String      @db.ObjectId
+  plan       ReadingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  dia        Int
+  titulo     String?
+  referencia String
+  reflexao   String
+  pergunta   String?
+  acao       String?
+  oracao     String?
+  createdAt  DateTime    @default(now())
+
+  @@unique([planId, dia])
+  @@index([planId])
+}
+
+model PlanEnrollment {
+  id             String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId         String           @db.ObjectId
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId         String           @db.ObjectId
+  plan           ReadingPlan      @relation(fields: [planId], references: [id], onDelete: Cascade)
+  status         EnrollmentStatus @default(ACTIVE)
+  diaAtual       Int              @default(1)
+  favorito       Boolean          @default(false)
+  startedAt      DateTime         @default(now())
+  lastActivityAt DateTime         @default(now())
+  completedAt    DateTime?
+  progresso      DayProgress[]
+
+  @@unique([userId, planId])
+  @@index([userId, status])
+  @@index([planId])
+}
+
+model DayProgress {
+  id           String         @id @default(auto()) @map("_id") @db.ObjectId
+  enrollmentId String         @db.ObjectId
+  enrollment   PlanEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  dia          Int
+  completedAt  DateTime       @default(now())
+
+  @@unique([enrollmentId, dia])
+}
+
+// ===========================================================================
+// Social: amizades (baseadas em consentimento) e bloqueio
+// ===========================================================================
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+}
+
+model Friendship {
+  id          String           @id @default(auto()) @map("_id") @db.ObjectId
+  requesterId String           @db.ObjectId
+  requester   User             @relation("FriendshipRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addresseeId String           @db.ObjectId
+  addressee   User             @relation("FriendshipAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+  status      FriendshipStatus @default(PENDING)
+  createdAt   DateTime         @default(now())
+  respondedAt DateTime?
+
+  @@unique([requesterId, addresseeId])
+  @@index([addresseeId, status])
+  @@index([requesterId, status])
+}
+
+model Block {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  blockerId String   @db.ObjectId
+  blocker   User     @relation("BlockBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId String   @db.ObjectId
+  blocked   User     @relation("BlockBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([blockerId, blockedId])
+  @@index([blockedId])
+}
+
+// ===========================================================================
+// Comunicação: conversas 1:1 (com estrutura pronta para grupos)
+// ===========================================================================
+model Conversation {
+  id            String                    @id @default(auto()) @map("_id") @db.ObjectId
+  isGroup       Boolean                   @default(false)
+  titulo        String?
+  createdAt     DateTime                  @default(now())
+  lastMessageAt DateTime                  @default(now())
+  participants  ConversationParticipant[]
+  messages      Message[]
+
+  @@index([lastMessageAt])
+}
+
+model ConversationParticipant {
+  id             String       @id @default(auto()) @map("_id") @db.ObjectId
+  conversationId String       @db.ObjectId
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String       @db.ObjectId
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt       DateTime     @default(now())
+  lastReadAt     DateTime?
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             String       @id @default(auto()) @map("_id") @db.ObjectId
+  conversationId String       @db.ObjectId
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String       @db.ObjectId
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  corpo          String
+  createdAt      DateTime     @default(now())
+  editedAt       DateTime?
+  deletedAt      DateTime?
+
+  @@index([conversationId, createdAt])
+}
+
+// ===========================================================================
+// Notificações (amizade, mensagens, planos, sistema)
+// ===========================================================================
+enum NotificationType {
+  FRIEND_REQUEST
+  FRIEND_ACCEPTED
+  MESSAGE
+  PLAN_SHARED
+  SYSTEM
+}
+
+model Notification {
+  id        String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String           @db.ObjectId
+  user      User             @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  actorId   String?          @db.ObjectId
+  actor     User?            @relation("NotificationActor", fields: [actorId], references: [id], onDelete: NoAction)
+  payload   String?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
 }

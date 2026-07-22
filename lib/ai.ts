@@ -229,3 +229,50 @@ Retorne três referências relevantes, conceitos e uma sugestão de sermão. Nã
   })
   return object
 }
+
+export async function generateReadingPlan({ tema, dias }: { tema: string; dias: number }) {
+  const { object } = await generateObject({
+    model: getModel(),
+    maxOutputTokens: 8_000,
+    schema: z.object({
+      titulo: z.string(),
+      descricao: z.string(),
+      categoria: z.string(),
+      dias: z
+        .array(
+          z.object({
+            titulo: z.string(),
+            referencia: z.string().describe('Referência bíblica real e precisa, ex.: "João 15:1-11"'),
+            reflexao: z.string(),
+            pergunta: z.string(),
+            acao: z.string(),
+            oracao: z.string(),
+          }),
+        )
+        .min(1),
+    }),
+    prompt: `Você é um discipulador maduro e cuidadoso, elaborando um plano de leitura de ${dias} dia(s) sobre o tema em <dados>. ${UNTRUSTED_DATA_RULE}
+Regras inegociáveis:
+- Cada dia deve ancorar em uma PASSAGEM BÍBLICA REAL e existente, com referência precisa. Não invente livros, capítulos ou versículos, e não reproduza o texto bíblico literal se não tiver certeza — indique apenas a referência para o leitor abrir a própria Bíblia.
+- A reflexão deve ter profundidade pastoral e teológica, evitando frases genéricas ou superficiais.
+- Inclua sempre: uma pergunta pessoal para exame de consciência, uma ação prática concreta e uma oração guiada curta.
+- Incentive explicitamente a leitura direta das Escrituras e a oração; nunca substitua a Bíblia pelo resumo.
+Produza exatamente ${dias} dia(s), na ordem de leitura.
+<dados>${promptData(tema, 300)}</dados>`,
+  })
+
+  return {
+    titulo: object.titulo,
+    descricao: object.descricao,
+    categoria: object.categoria,
+    dias: object.dias.slice(0, dias).map((dia, index) => ({
+      dia: index + 1,
+      titulo: dia.titulo,
+      referencia: dia.referencia,
+      reflexao: dia.reflexao,
+      pergunta: dia.pergunta,
+      acao: dia.acao,
+      oracao: dia.oracao,
+    })),
+  }
+}

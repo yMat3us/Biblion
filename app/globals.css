@@ -2337,3 +2337,577 @@ body {
   .verse-selector-dialog[open] { align-items: center; }
   .verse-selector-dialog__panel { padding: 1.25rem; }
 }
+
+/* =====================================================================
+   BIBLION — Códice Vivo · edição mobile-first
+   Celular e tablet são a superfície principal: toque, safe areas, teclado,
+   leitura e criação vêm antes da composição de desktop.
+   ===================================================================== */
+
+:root {
+  --mobile-inline: clamp(0.875rem, 4vw, 1.2rem);
+  --mobile-topbar-height: 3.75rem;
+  --mobile-dock-height: 4.45rem;
+  --mobile-dock-gap: 0.65rem;
+  --mobile-dock-clearance: calc(var(--mobile-dock-height) + var(--mobile-dock-gap) + max(0.65rem, env(safe-area-inset-bottom)));
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+body {
+  min-height: 100dvh;
+  overscroll-behavior-y: none;
+}
+button,
+a,
+input,
+textarea,
+select { touch-action: manipulation; }
+img,
+video,
+canvas { max-width: 100%; }
+
+/* Conteúdo gerado por IA/GFM nunca deve ser cortado no eixo horizontal. */
+.prose,
+.reading,
+.verse-text,
+.tutor-message,
+.lesson-movement { min-width: 0; overflow-wrap: anywhere; }
+.prose pre {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--color-hairline);
+  border-radius: 0.75rem;
+  padding: 0.9rem;
+  background: rgb(0 0 0 / 0.22);
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.prose code { overflow-wrap: normal; word-break: normal; }
+.prose table {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  white-space: nowrap;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.prose th,
+.prose td { border-bottom: 1px solid var(--color-hairline); padding: 0.65rem 0.8rem; text-align: left; }
+
+/* A barra do sistema respeita notch, ilhas e tablets em landscape. */
+.skip-link { left: max(0.75rem, env(safe-area-inset-left)); }
+.chat-composer {
+  padding-right: max(0.75rem, env(safe-area-inset-right));
+  padding-left: max(0.75rem, env(safe-area-inset-left));
+}
+.select-field { min-height: 3rem; height: 3rem; font-size: 1rem; }
+
+/* Bottom sheets e dialogs usam toda a viewport útil, sem tocar no recorte. */
+.modal-layer {
+  padding-right: max(0px, env(safe-area-inset-right));
+  padding-left: max(0px, env(safe-area-inset-left));
+}
+.modal-layer > [role="dialog"] {
+  max-height: calc(100dvh - max(0.5rem, env(safe-area-inset-top)));
+  border-bottom: 0;
+}
+.modal-layer > [role="dialog"] > div:first-child {
+  padding-top: max(1rem, env(safe-area-inset-top));
+}
+.modal-layer button[aria-label="Fechar diálogo"],
+.verse-selector-dialog button[aria-label="Fechar"] { width: 2.75rem; height: 2.75rem; }
+.verse-selector-dialog {
+  padding-right: max(0.75rem, env(safe-area-inset-right));
+  padding-left: max(0.75rem, env(safe-area-inset-left));
+}
+.verse-selector-dialog .grid.grid-cols-6 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.verse-selector-dialog .grid.grid-cols-6 > button { min-width: 2.75rem; min-height: 2.75rem; aspect-ratio: 1; }
+
+.ai-selection-menu { overscroll-behavior: contain; scrollbar-width: thin; }
+.ai-selection-menu [role="menuitem"] { min-height: 2.75rem; padding-block: 0.65rem; font-size: 0.8125rem; }
+
+/* O fallback global também precisa sobreviver a zoom e teclado. */
+.system-state-shell {
+  min-height: 100dvh;
+  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+}
+
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  textarea,
+  select { font-size: 16px !important; }
+
+  .sidebar-close,
+  .shell-menu-button,
+  .shell-profile,
+  .chat-composer button,
+  .tutor-header button,
+  [aria-label="Copiar resposta"],
+  [aria-label="Resposta copiada"],
+  .login-auth-form button[aria-label="Mostrar senha"],
+  .login-auth-form button[aria-label="Ocultar senha"] { min-width: 2.75rem; min-height: 2.75rem; }
+
+  .sidebar-link,
+  .sidebar-logout,
+  .sidebar-profile,
+  .sidebar-tutor,
+  .atlas-query-chip,
+  .bible-entry-link,
+  .theology-index__entry,
+  .tutor-prompt,
+  .dashboard-filter button { min-height: 2.75rem; }
+}
+
+/* Celulares e tablets compartilham o shell móvel. O desktop só começa em 1280. */
+@media (max-width: 1279px) {
+  .app-shell { --shell-mobile-clearance: var(--mobile-dock-clearance); }
+
+  .sidebar-shell {
+    width: min(88vw, 21rem);
+    max-width: calc(100vw - max(1rem, env(safe-area-inset-right)));
+    height: 100dvh;
+    padding-left: env(safe-area-inset-left);
+  }
+  .sidebar-brand-row {
+    min-height: calc(4.6rem + env(safe-area-inset-top));
+    padding-right: max(1rem, env(safe-area-inset-right));
+    padding-left: max(1rem, env(safe-area-inset-left));
+  }
+  .sidebar-close,
+  .shell-menu-button { display: flex; width: 2.75rem; height: 2.75rem; }
+  .sidebar-link { min-height: 3rem; padding-block: 0.35rem; }
+  .sidebar-account { padding-bottom: max(0.85rem, env(safe-area-inset-bottom)); }
+
+  #mobile-navigation {
+    position: fixed !important;
+    transform: translateX(-100%) !important;
+  }
+  #mobile-navigation[role="dialog"] { transform: translateX(0) !important; }
+  .app-shell > button[aria-label="Fechar menu"] { display: block; }
+
+  .shell-topbar {
+    height: calc(var(--mobile-topbar-height) + env(safe-area-inset-top));
+    gap: 0.5rem;
+    padding-top: env(safe-area-inset-top);
+    padding-right: max(0.7rem, env(safe-area-inset-right));
+    padding-left: max(0.7rem, env(safe-area-inset-left));
+  }
+  .shell-location { min-width: 0; flex: 1; }
+  .shell-location__icon { width: 2.25rem; height: 2.25rem; }
+  .shell-search {
+    width: 2.75rem;
+    height: 2.75rem;
+    flex: none;
+    justify-content: center;
+    margin-inline: 0;
+    padding-inline: 0;
+  }
+  .shell-search > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .shell-search__key { display: none; }
+  .shell-profile { width: 2.75rem; height: 2.75rem; justify-content: center; padding: 0.25rem; }
+  .shell-profile__avatar { width: 2.15rem; height: 2.15rem; }
+  .shell-route-wash { top: calc(var(--mobile-topbar-height) + env(safe-area-inset-top)); left: 0; height: 9rem; }
+
+  .mobile-dock {
+    right: max(var(--mobile-dock-gap), env(safe-area-inset-right));
+    bottom: max(var(--mobile-dock-gap), env(safe-area-inset-bottom));
+    left: max(var(--mobile-dock-gap), env(safe-area-inset-left));
+    display: grid;
+    width: auto;
+    max-width: 42rem;
+    min-height: var(--mobile-dock-height);
+    margin-inline: auto;
+    border-radius: 1.25rem;
+    padding: 0.35rem;
+    background: rgb(7 9 14 / 0.95);
+    box-shadow: 0 22px 70px -24px #000, 0 1px 0 rgb(255 255 255 / 0.035) inset;
+  }
+  .mobile-dock__link {
+    position: relative;
+    min-height: 3.7rem;
+    border-radius: 0.95rem;
+    font-size: 0.64rem;
+    letter-spacing: -0.01em;
+  }
+  .mobile-dock__link::after {
+    content: "";
+    position: absolute;
+    top: 0.25rem;
+    left: 50%;
+    width: 1rem;
+    height: 2px;
+    transform: translateX(-50%) scaleX(0);
+    border-radius: 99px;
+    background: var(--shell-tint);
+    transition: transform 180ms var(--ease-spring);
+  }
+  .mobile-dock__link[data-active="true"]::after { transform: translateX(-50%) scaleX(1); }
+
+  .app-shell:not([data-focus-mode="true"]) .shell-main > div > div { padding-bottom: var(--mobile-dock-clearance) !important; }
+  .app-shell[data-focus-mode="true"] .shell-main > div > div { padding-bottom: 0 !important; }
+
+  .editor-action-bar {
+    bottom: calc(var(--mobile-dock-clearance) + 0.35rem);
+    z-index: 34;
+    border-radius: 1.05rem;
+    background: rgb(7 9 14 / 0.94);
+  }
+  body:has(.app-shell) .toast-region { bottom: calc(var(--mobile-dock-clearance) + 0.65rem) !important; }
+  body:has(.app-shell[data-focus-mode="true"]) .toast-region { bottom: max(1rem, env(safe-area-inset-bottom)) !important; }
+
+  /* Neutraliza os cliffs de 1024px definidos pela composição desktop. */
+  .page-header { min-height: 0; display: block; padding: 1.7rem; }
+  .page-header > .relative { flex-direction: column; align-items: stretch; }
+  .page-header__action { align-self: flex-start; }
+  .detail-header { flex-direction: column; align-items: stretch; justify-content: flex-start; padding: 1.5rem; }
+  .editor-grid { grid-template-columns: minmax(0, 1fr); }
+
+  .account-row {
+    grid-template-columns: 1.15rem minmax(0, 1fr);
+    align-items: start;
+    padding: 1.15rem;
+  }
+  .account-row > label,
+  .account-row > div:nth-last-child(2),
+  .account-row > button { grid-column: 2; }
+
+  .login-gate__shell { grid-template-columns: minmax(0, 1fr); }
+  .login-brand-panel { display: none; }
+}
+
+/* Tablet: mais respiro, ainda sem sacrificar área útil para uma sidebar fixa. */
+@media (min-width: 640px) and (max-width: 1279px) {
+  .page-container {
+    padding-right: max(1.5rem, env(safe-area-inset-right));
+    padding-left: max(1.5rem, env(safe-area-inset-left));
+  }
+  .shell-location { min-width: 9rem; flex: none; }
+  .shell-search {
+    width: min(100%, 32rem);
+    flex: 1;
+    justify-content: flex-start;
+    padding-inline: 0.9rem;
+  }
+  .shell-search > span { position: static; width: auto; height: auto; overflow: visible; clip-path: none; white-space: normal; }
+  .shell-search__key { display: inline-flex; }
+  .page-header { padding: 2rem; }
+  .dashboard-folio { grid-template-columns: minmax(0, 1fr); }
+  .dashboard-folio__scripture { min-height: 14rem; }
+  .sermon-ledger { grid-template-columns: minmax(0, 1fr); }
+  .sermon-ledger__heading { border-right: 0; border-bottom: 1px solid var(--color-hairline); }
+  .sermon-ledger__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sermon-ledger__entry { border-bottom: 1px solid var(--color-hairline); }
+}
+
+/* Phones: folios compactos, controles por polegar e uma coluna real. */
+@media (max-width: 639px) {
+  .page-container {
+    padding-top: 0.9rem;
+    padding-right: max(var(--mobile-inline), env(safe-area-inset-right));
+    padding-bottom: 2.25rem;
+    padding-left: max(var(--mobile-inline), env(safe-area-inset-left));
+  }
+  .workspace-page[data-archetype]::before { right: var(--mobile-inline); left: var(--mobile-inline); }
+
+  .surface,
+  .app-panel,
+  .form-section { border-radius: 1rem; }
+  .form-section { padding: 1rem; }
+  .page-header {
+    margin-bottom: 1.1rem;
+    border-radius: 1rem;
+    padding: 1.2rem 1rem 1.3rem;
+  }
+  .page-header__index { margin-bottom: 1rem; }
+  .page-header__eyebrow { margin-bottom: 0.65rem; font-size: 0.66rem; }
+  .page-header__title { font-size: clamp(1.95rem, 9.6vw, 2.55rem); line-height: 1.01; }
+  .page-header__description { margin-top: 0.8rem; font-size: 0.925rem; line-height: 1.65; }
+  .page-header__mark { right: -3rem; opacity: 0.25; }
+  .page-header__action { width: 100%; margin-top: 0.15rem; }
+  .page-header__action > * { width: 100%; }
+  .page-header__action a,
+  .page-header__action button { width: 100%; justify-content: center; }
+
+  .detail-header { gap: 1rem; margin-bottom: 1.1rem; border-radius: 1rem; padding: 1rem; }
+  .detail-header > div:first-child > a { margin-bottom: 1rem; }
+  .detail-header .icon-tile { width: 2.75rem; height: 2.75rem; border-radius: 0.85rem; }
+  .detail-header h1 { font-size: clamp(1.55rem, 7.5vw, 2rem); line-height: 1.08; }
+  .detail-header > div:last-child:not(:first-child) { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .detail-header > div:last-child:not(:first-child) > * { width: 100%; justify-content: center; }
+
+  .section-title { font-size: 1.05rem; }
+  .section-heading__rule { margin-top: 0.65rem; }
+  .toolbar-shell { gap: 0.6rem; margin-bottom: 1rem; padding: 0.65rem; }
+  .manuscript-toolbar,
+  .marginalia-toolbar {
+    gap: 0.7rem;
+    margin-bottom: 1rem;
+    overflow-x: auto;
+    padding-bottom: 0.75rem;
+    overscroll-behavior-inline: contain;
+  }
+  .manuscript-toolbar button,
+  .marginalia-toolbar button { min-height: 2.75rem; }
+
+  .editor-action-bar {
+    gap: 0.5rem;
+    margin-top: 1rem;
+    padding: 0.5rem;
+  }
+  .editor-action-bar > div:last-child { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .editor-action-bar > div:last-child > * { width: 100%; }
+
+  .dashboard-folio {
+    min-height: 0;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding: 1.35rem 1rem 1rem 1.2rem;
+  }
+  .dashboard-folio__date { margin-bottom: 1rem; }
+  .dashboard-folio__intro h1 { font-size: clamp(2.15rem, 11vw, 2.85rem); line-height: 0.99; }
+  .dashboard-folio__intro > p { margin-top: 0.85rem; font-size: 0.92rem; line-height: 1.65; }
+  .dashboard-folio__scripture { min-height: 12.5rem; padding: 1.15rem; }
+  .dashboard-folio__scripture blockquote { font-size: 1.3rem; line-height: 1.4; }
+  .dashboard-ledger__heading,
+  .dashboard-section-heading { padding: 1rem; }
+  .dashboard-ledger__entry { min-height: 4.25rem; padding: 0.8rem; }
+  .dashboard-filter { width: 100%; }
+  .dashboard-filter button { flex: 1; padding-inline: 0.55rem; }
+  .dashboard-timeline { padding-left: 0.75rem; }
+  .dashboard-timeline__entry { padding-right: 0.85rem; }
+
+  .bible-entry-rail { gap: 0.65rem; margin-bottom: 1rem; }
+  .bible-entry-link { padding: 0.6rem; }
+  .bible-testament { margin-bottom: 2rem; }
+  .bible-testament__header { align-items: flex-start; }
+  .bible-testament__header > span:last-child { white-space: nowrap; }
+  .bible-volume { min-height: 10rem; padding: 0.85rem 0.85rem 0.8rem 1.1rem; }
+  .bible-volume__title { font-size: 1.08rem; }
+  .reading,
+  .verse-text { font-size: 1.075rem; line-height: 1.92; }
+  .reader-paper { border-radius: 0.65rem 1rem 1rem 0.65rem; }
+
+  .atlas-query-chip { min-height: 2.75rem; padding: 0.55rem 0.75rem; }
+  .atlas-discovery { min-height: 0; }
+  .atlas-discovery__legend { padding: 1.15rem; }
+  .atlas-discovery__legend h2 { font-size: 1.75rem; }
+  .atlas-discovery__coordinates { gap: 0.65rem 1rem; margin-top: 1.25rem; }
+  .atlas-discovery__paths { padding-inline: 0.75rem; }
+  .theology-index { padding: 0.25rem; }
+  .theology-index__entry { grid-template-columns: 2.5rem minmax(0, 1fr); gap: 0.7rem; padding: 0.9rem 0.75rem; }
+  .theology-index__number { display: none; }
+
+  .tutor-header {
+    gap: 0.55rem;
+    padding: 0.55rem max(0.75rem, env(safe-area-inset-right)) 0.55rem max(0.75rem, env(safe-area-inset-left));
+  }
+  .tutor-header__seal { width: 2.75rem; height: 2.75rem; }
+  .tutor-welcome { padding-block: 0.5rem 1.25rem; }
+  .tutor-welcome__seal { width: 3.75rem; height: 3.75rem; margin-bottom: 1rem; }
+  .tutor-welcome > h2 { font-size: clamp(2rem, 10vw, 2.55rem); }
+  .tutor-welcome > p:not(.index-label) { line-height: 1.65; }
+  .tutor-prompts { margin-top: 1.25rem; }
+  .tutor-prompt { grid-template-columns: 2.35rem minmax(0, 1fr) 1rem; padding: 0.75rem; }
+  .tutor-prompt__number { display: none; }
+  .tutor-message > span { width: 2.25rem !important; height: 2.25rem !important; }
+  .chat-composer { padding-bottom: max(0.65rem, env(safe-area-inset-bottom)); }
+
+  .sermon-ledger__heading { padding: 0.9rem 1rem; }
+  .sermon-ledger__entry { min-height: 3.75rem; padding: 0.75rem 0.85rem; }
+  .manuscript-movement { padding: 0.85rem; }
+  .manuscript-submovement { padding: 0.75rem 0.6rem 0.75rem 0.85rem; }
+  .sermon-document { border-radius: 0.6rem 1rem 1rem 0.6rem; padding: 0.65rem; }
+  .sermon-document > .form-section { padding-inline: 0.65rem; }
+  .outline-editor__block { padding: 0.7rem; }
+  .outline-editor__block > .grid { grid-template-columns: minmax(0, 1fr) !important; }
+  .outline-record,
+  .marginalia-note,
+  .ebd-lesson-slot { min-height: 12.5rem; padding: 1rem; }
+  .marginalia-note > p { font-size: 0.95rem; line-height: 1.75; }
+
+  .ebd-ledger__entry { min-height: 3.75rem; padding-inline: 0.25rem; }
+  .ebd-volume { min-height: 16rem; aspect-ratio: 4 / 5; }
+  .ebd-edition-overview { border-radius: 0.6rem 1rem 1rem 0.6rem; }
+  .ebd-study-cabinet { padding: 1rem; }
+  .library-empty-state { min-height: 20rem; padding: 1.25rem; }
+
+  .account-ledger > div { padding: 0.65rem 0.5rem; }
+  .account-ledger p { font-size: 0.55rem; }
+  .account-row { gap: 0.65rem; padding: 0.9rem; }
+  .accounts-registry > div:first-child { padding: 1rem; }
+
+  .login-gate {
+    min-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: max(0.65rem, env(safe-area-inset-top)) max(0.65rem, env(safe-area-inset-right)) max(0.65rem, env(safe-area-inset-bottom)) max(0.65rem, env(safe-area-inset-left));
+    -webkit-overflow-scrolling: touch;
+  }
+  .login-gate__shell { min-height: calc(100dvh - 1.3rem); overflow: visible; }
+  .login-auth-panel { align-items: flex-start; padding: clamp(1.4rem, 8vh, 3rem) 1rem 2rem; }
+  .login-auth-form::before { left: -0.65rem; }
+  .system-state { border-radius: 0.6rem 1rem 1rem 0.6rem; padding: 1.25rem; }
+  .system-state > div > div:last-child { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .system-state > div > div:last-child > * { width: 100%; justify-content: center; }
+
+  .modal-layer > [role="dialog"] { width: 100%; border-radius: 1.35rem 1.35rem 0 0; }
+  .modal-layer > [role="dialog"] > div:first-child { padding-right: max(1rem, env(safe-area-inset-right)); padding-left: max(1rem, env(safe-area-inset-left)); }
+  .modal-layer > [role="dialog"] > div:last-child { padding-right: max(1rem, env(safe-area-inset-right)); padding-left: max(1rem, env(safe-area-inset-left)); }
+  .modal-layer .grid.grid-cols-2 { grid-template-columns: minmax(0, 1fr); }
+
+  .verse-selector-dialog__panel { border-radius: 1.25rem 1.25rem 0.65rem 0.65rem; padding: 0.9rem; }
+  .toast-region { right: max(0.75rem, env(safe-area-inset-right)) !important; left: max(0.75rem, env(safe-area-inset-left)) !important; }
+  .toast-region button[aria-label^="Fechar aviso"] { width: 2.75rem; height: 2.75rem; }
+}
+
+@media (min-width: 375px) and (max-width: 639px) {
+  .verse-selector-dialog .grid.grid-cols-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
+
+@media (min-width: 390px) and (max-width: 519px) {
+  .bible-shelf,
+  .ebd-shelf { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ebd-volume { min-height: 15rem; }
+}
+
+@media (min-width: 900px) and (max-width: 1279px) {
+  .dashboard-folio { grid-template-columns: minmax(0, 1.25fr) minmax(18rem, 0.75fr); }
+  .dashboard-folio__scripture { min-height: 100%; }
+}
+
+@media (min-width: 1280px) {
+  #mobile-navigation { position: relative !important; transform: translateX(0) !important; }
+  .sidebar-close,
+  .shell-menu-button,
+  .mobile-dock { display: none !important; }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .panel-interactive:hover,
+  .bible-volume:hover,
+  .ebd-volume:hover,
+  .sermon-manuscript:hover,
+  .outline-record:hover,
+  .marginalia-note:hover,
+  .ebd-lesson-slot:hover { transform: none; }
+}
+
+@media (max-height: 560px) and (orientation: landscape) {
+  .shell-topbar { --mobile-topbar-height: 3.25rem; }
+  .mobile-dock { --mobile-dock-height: 3.9rem; }
+  .mobile-dock__link { min-height: 3.1rem; flex-direction: row; gap: 0.4rem; }
+  .login-auth-panel { padding-block: 1rem; }
+  .tutor-welcome__seal { display: none; }
+}
+
+/* Ajustes de jornada após a migração do shell para 1280px. */
+@media (max-width: 1279px) {
+  .tutor-cabinet.chat-shell {
+    height: calc(100dvh - var(--mobile-topbar-height) - env(safe-area-inset-top)) !important;
+    min-height: 0;
+  }
+  .chat-transcript > div {
+    padding-right: max(1rem, env(safe-area-inset-right));
+    padding-left: max(1rem, env(safe-area-inset-left));
+  }
+  .chat-composer form { min-width: 0; }
+  .chat-composer textarea { min-width: 0; font-size: 16px !important; }
+
+  .reading-dock { scroll-margin-top: calc(var(--mobile-topbar-height) + 0.5rem); }
+  .bible-catalog-toolbar { top: 0.5rem; }
+  .bible-catalog-toolbar input { min-height: 2.75rem; font-size: 16px; }
+  .bible-catalog-toolbar button { min-height: 2.75rem; }
+
+  .workspace-page button[aria-label],
+  .workspace-page summary,
+  .sermon-manuscript button,
+  .outline-record button,
+  .marginalia-note button,
+  .ebd-volume button,
+  .ebd-lesson-slot button { min-height: 2.75rem; }
+  .workspace-page button[aria-label] { min-width: 2.75rem; }
+}
+
+@media (max-width: 639px) {
+  .page-header:has(.atlas-query-chip) > .relative > div:first-child > div:last-child {
+    margin-right: -1rem;
+    overflow-x: auto;
+    padding-right: 1rem;
+    padding-bottom: 0.25rem;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
+  }
+  .page-header:has(.atlas-query-chip) > .relative > div:first-child > div:last-child::-webkit-scrollbar { display: none; }
+  .page-header:has(.atlas-query-chip) > .relative > div:first-child > div:last-child > div {
+    width: max-content;
+    max-width: none;
+    flex-wrap: nowrap;
+  }
+  .page-header:has(.atlas-query-chip) .atlas-query-chip { flex: none; max-width: 15rem; }
+
+  .bible-catalog-toolbar > div:last-child { display: grid; width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .bible-catalog-toolbar > div:last-child button { width: 100%; padding-inline: 0.35rem; }
+
+  .tutor-message { gap: 0.55rem; }
+  .tutor-message > div { max-width: calc(100% - 2.8rem) !important; }
+  .tutor-message > div > div { padding: 0.9rem; }
+  .chat-composer form { gap: 0.35rem; padding: 0.4rem; border-radius: 1rem; }
+  .chat-composer form button { flex: none; }
+
+  .accounts-workspace,
+  .administration-workspace { gap: 1rem; }
+  .account-row select,
+  .account-row button { width: 100%; }
+  .profile-preview { gap: 1rem; }
+
+  .manuscript-toolbar > div:last-child,
+  .marginalia-toolbar > div:last-child { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .manuscript-toolbar > div:last-child > *,
+  .marginalia-toolbar > div:last-child > * { width: 100%; justify-content: center; }
+
+  [aria-label^="Remover "] { min-width: 2.75rem !important; min-height: 2.75rem !important; }
+  [aria-label="Copiar mensagem"],
+  [aria-label="Mensagem copiada"] { min-height: 2.75rem !important; padding-inline: 0.75rem !important; }
+}
+
+@media (pointer: coarse) {
+  .workspace-page button,
+  .chat-shell button,
+  .login-gate button,
+  .modal-layer button,
+  .verse-selector-dialog button { min-height: 2.75rem; }
+
+  .workspace-page button[aria-label],
+  .chat-shell button[aria-label],
+  .login-gate button[aria-label],
+  .modal-layer button[aria-label],
+  .verse-selector-dialog button[aria-label] { min-width: 2.75rem; }
+}
+
+/* Correções finais da revisão semântica: regiões independentes e escopo. */
+@media (max-width: 1279px) {
+  body:has(.app-shell) .toast-region {
+    top: calc(var(--mobile-topbar-height) + env(safe-area-inset-top) + 0.75rem);
+    bottom: auto !important;
+  }
+  body:has(.app-shell[data-focus-mode="true"]) .toast-region {
+    top: calc(var(--mobile-topbar-height) + env(safe-area-inset-top) + 4.5rem);
+    bottom: auto !important;
+  }
+}
+
+@media (min-width: 640px) {
+  .verse-selector-dialog .grid.grid-cols-6 { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+}
+
+@media (max-height: 560px) and (orientation: landscape) {
+  .app-shell {
+    --mobile-topbar-height: 3.25rem;
+    --mobile-dock-height: 3.9rem;
+  }
+}

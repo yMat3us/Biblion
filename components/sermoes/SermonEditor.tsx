@@ -496,7 +496,7 @@ export function SermonEditor(props: SermonEditorProps) {
               </div>
             </section>
 
-            <section className="form-section grid gap-5 lg:grid-cols-2">
+            <section className="form-section grid gap-5 xl:grid-cols-2">
               <div>
                 <SectionHeading icon={CheckCircle2} title="Conclusão" description="Retome a verdade central e conduza a uma decisão." />
                 <Textarea aria-label="Conteúdo da conclusão" value={conclusao} onChange={(event) => setConclusao(event.target.value)} maxLength={20000} rows={7} placeholder="Sintetize os movimentos e apresente o chamado final…" />
@@ -508,7 +508,7 @@ export function SermonEditor(props: SermonEditorProps) {
             </section>
           </div>
 
-          <aside className="manuscript-editor-index space-y-5 lg:sticky lg:top-6">
+          <aside className="manuscript-editor-index space-y-5 xl:sticky xl:top-6">
             <section className="form-section form-section--accent">
               <SectionHeading icon={BrainCircuit} title="Copiloto homilético" description="Use a IA como ponto de partida, nunca como versão final." />
               <Button type="button" loading={aiTask === 'full'} disabled={Boolean(aiTask)} onClick={generateFullSermon} className="w-full">

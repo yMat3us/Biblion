@@ -90,7 +90,7 @@ export function Modal({ isOpen, onClose, title, description, children, size = 'm
   }
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-end justify-center p-0 sm:items-center sm:p-4">
+    <div className="modal-layer fixed inset-0 z-[120] flex items-end justify-center p-0 sm:items-center sm:p-4">
       <div
         aria-hidden="true"
         className="absolute inset-0 bg-black/72 backdrop-blur-md"

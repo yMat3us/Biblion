@@ -4,19 +4,24 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
+  Bell,
   BookMarked,
   BookOpen,
   ChevronRight,
   FileText,
   GraduationCap,
   LayoutDashboard,
+  ListChecks,
   LogOut,
+  MessageCircle,
   Mic,
+  Music4,
   PenTool,
   Search,
   Settings,
   Sparkles,
   Users,
+  UsersRound,
   X,
   type LucideIcon,
 } from 'lucide-react'
@@ -33,15 +38,17 @@ interface NavigationLink {
 const mainLinks: NavigationLink[] = [
   { href: '/dashboard', label: 'Fólio diário', icon: LayoutDashboard, index: '01', tone: 'primary' },
   { href: '/biblia', label: 'Bíblia', icon: BookOpen, index: '02', tone: 'scripture' },
-  { href: '/sermoes', label: 'Sermões', icon: Mic, index: '03', tone: 'primary' },
-  { href: '/ebd', label: 'Escola Bíblica', icon: GraduationCap, index: '04', tone: 'success' },
-  { href: '/busca', label: 'Busca inteligente', icon: Search, index: '05', tone: 'info' },
+  { href: '/hinos', label: 'Harpa Cristã', icon: Music4, index: '03', tone: 'success' },
+  { href: '/planos', label: 'Planos de leitura', icon: ListChecks, index: '04', tone: 'info' },
+  { href: '/sermoes', label: 'Sermões', icon: Mic, index: '05', tone: 'primary' },
+  { href: '/ebd', label: 'Escola Bíblica', icon: GraduationCap, index: '06', tone: 'success' },
+  { href: '/busca', label: 'Busca inteligente', icon: Search, index: '07', tone: 'info' },
 ]
 
 const resourceLinks: NavigationLink[] = [
-  { href: '/esbocos', label: 'Esboços', icon: FileText, index: '06', tone: 'primary' },
-  { href: '/anotacoes', label: 'Anotações', icon: PenTool, index: '07', tone: 'scripture' },
-  { href: '/teologia', label: 'Teologia sistemática', icon: BookMarked, index: '08', tone: 'info' },
+  { href: '/esbocos', label: 'Esboços', icon: FileText, index: '08', tone: 'primary' },
+  { href: '/anotacoes', label: 'Anotações', icon: PenTool, index: '09', tone: 'scripture' },
+  { href: '/teologia', label: 'Teologia sistemática', icon: BookMarked, index: '10', tone: 'info' },
 ]
 
 export function Sidebar({ user, onClose }: { user: CurrentUserView; onClose?: () => void }) {
@@ -149,8 +156,11 @@ export function Sidebar({ user, onClose }: { user: CurrentUserView; onClose?: ()
             <p id="nav-account">Administração</p>
           </div>
           <div className="space-y-0.5">
-            {renderLink({ href: '/perfil', label: 'Preferências', icon: Settings, index: '09', tone: 'neutral' })}
-            {canManageAccounts && renderLink({ href: '/contas', label: 'Gerenciar contas', icon: Users, index: '10', tone: 'neutral' })}
+            {renderLink({ href: '/amigos', label: 'Comunidade', icon: UsersRound, index: '11', tone: 'primary' })}
+            {renderLink({ href: '/conversas', label: 'Mensagens', icon: MessageCircle, index: '12', tone: 'info' })}
+            {renderLink({ href: '/notificacoes', label: 'Notificações', icon: Bell, index: '13', tone: 'scripture' })}
+            {renderLink({ href: '/perfil', label: 'Preferências', icon: Settings, index: '14', tone: 'neutral' })}
+            {canManageAccounts && renderLink({ href: '/contas', label: 'Gerenciar contas', icon: Users, index: '15', tone: 'neutral' })}
           </div>
         </section>
       </nav>

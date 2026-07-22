@@ -356,7 +356,7 @@ export default function EsbocosPage() {
                           <Trash2 size={14} />
                         </Button>
                       </div>
-                      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_17rem]">
+                      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_17rem]">
                         <Textarea
                           aria-label={`Texto do bloco ${index + 1}`}
                           placeholder={item.nivel === 1 ? 'Título e desenvolvimento do ponto principal…' : 'Subponto, explicação ou aplicação…'}
@@ -381,7 +381,7 @@ export default function EsbocosPage() {
               </section>
             </div>
 
-            <aside className="outline-template-index form-section h-fit lg:sticky lg:top-6">
+            <aside className="outline-template-index form-section h-fit xl:sticky xl:top-6">
               <SectionHeading icon={Sparkles} title="Pontos de partida" description="Aplique uma estrutura pronta e personalize cada bloco." />
               <div className="space-y-2.5">
                 {MODELOS_RAPIDOS.map((modelo) => {
@@ -436,7 +436,7 @@ export default function EsbocosPage() {
           }
         />
 
-        <article className="outline-document reader-paper p-5 sm:p-8 lg:p-10">
+        <article className="outline-document reader-paper p-5 sm:p-8 xl:p-10">
           <div className="relative space-y-3">
             {selectedEsboco.itens.map((item, index) => (
               <div

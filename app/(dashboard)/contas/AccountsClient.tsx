@@ -141,8 +141,8 @@ export function AccountsClient({
         }
       />
 
-      <div className="accounts-workspace grid gap-6 lg:grid-cols-[21rem_minmax(0,1fr)]">
-        <form onSubmit={createAccount} className="account-invite form-section form-section--accent h-fit space-y-5 lg:sticky lg:top-6">
+      <div className="accounts-workspace grid gap-6 xl:grid-cols-[21rem_minmax(0,1fr)]">
+        <form onSubmit={createAccount} className="account-invite form-section form-section--accent h-fit space-y-5 xl:sticky xl:top-6">
           <SectionHeading
             icon={UserPlus}
             title="Novo acesso"

@@ -4,36 +4,47 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
+  Bell,
   BookMarked,
   BookOpen,
   BrainCircuit,
   FileText,
   GraduationCap,
   LayoutDashboard,
+  ListChecks,
   Menu,
   Mic,
+  MessageCircle,
+  Music4,
   PenTool,
   Search,
   Settings,
   UserRound,
   Users,
+  UsersRound,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Sidebar } from './Sidebar'
+import { NotificationBell } from './NotificationBell'
 import { accentFor, userInitial, type CurrentUserView } from '@/types/auth'
 
 const routeMeta = [
   { prefix: '/dashboard', label: 'Fólio diário', shortLabel: 'Início', icon: LayoutDashboard, space: 'folio', index: '01' },
   { prefix: '/biblia', label: 'Bíblia', shortLabel: 'Bíblia', icon: BookOpen, space: 'scripture', index: '02' },
-  { prefix: '/sermoes', label: 'Sermões', shortLabel: 'Sermões', icon: Mic, space: 'manuscript', index: '03' },
-  { prefix: '/ebd', label: 'Escola Bíblica', shortLabel: 'EBD', icon: GraduationCap, space: 'library', index: '04' },
-  { prefix: '/tutor', label: 'Gabinete teológico', shortLabel: 'Tutor', icon: BrainCircuit, space: 'cabinet', index: '05' },
-  { prefix: '/busca', label: 'Busca inteligente', shortLabel: 'Busca', icon: Search, space: 'atlas', index: '06' },
-  { prefix: '/anotacoes', label: 'Anotações', shortLabel: 'Notas', icon: PenTool, space: 'marginalia', index: '07' },
-  { prefix: '/esbocos', label: 'Esboços', shortLabel: 'Esboços', icon: FileText, space: 'manuscript', index: '08' },
-  { prefix: '/teologia', label: 'Teologia sistemática', shortLabel: 'Teologia', icon: BookMarked, space: 'atlas', index: '09' },
-  { prefix: '/perfil', label: 'Preferências', shortLabel: 'Perfil', icon: Settings, space: 'administration', index: '10' },
-  { prefix: '/contas', label: 'Gerenciar contas', shortLabel: 'Contas', icon: Users, space: 'administration', index: '11' },
+  { prefix: '/hinos', label: 'Harpa Cristã', shortLabel: 'Hinos', icon: Music4, space: 'library', index: '03' },
+  { prefix: '/planos', label: 'Planos de leitura', shortLabel: 'Planos', icon: ListChecks, space: 'library', index: '04' },
+  { prefix: '/sermoes', label: 'Sermões', shortLabel: 'Sermões', icon: Mic, space: 'manuscript', index: '05' },
+  { prefix: '/ebd', label: 'Escola Bíblica', shortLabel: 'EBD', icon: GraduationCap, space: 'library', index: '06' },
+  { prefix: '/tutor', label: 'Gabinete teológico', shortLabel: 'Tutor', icon: BrainCircuit, space: 'cabinet', index: '07' },
+  { prefix: '/busca', label: 'Busca inteligente', shortLabel: 'Busca', icon: Search, space: 'atlas', index: '08' },
+  { prefix: '/amigos', label: 'Comunidade', shortLabel: 'Amigos', icon: UsersRound, space: 'cabinet', index: '09' },
+  { prefix: '/conversas', label: 'Mensagens', shortLabel: 'Chat', icon: MessageCircle, space: 'cabinet', index: '10' },
+  { prefix: '/notificacoes', label: 'Notificações', shortLabel: 'Avisos', icon: Bell, space: 'cabinet', index: '11' },
+  { prefix: '/anotacoes', label: 'Anotações', shortLabel: 'Notas', icon: PenTool, space: 'marginalia', index: '12' },
+  { prefix: '/esbocos', label: 'Esboços', shortLabel: 'Esboços', icon: FileText, space: 'manuscript', index: '13' },
+  { prefix: '/teologia', label: 'Teologia sistemática', shortLabel: 'Teologia', icon: BookMarked, space: 'atlas', index: '14' },
+  { prefix: '/perfil', label: 'Preferências', shortLabel: 'Perfil', icon: Settings, space: 'administration', index: '15' },
+  { prefix: '/contas', label: 'Gerenciar contas', shortLabel: 'Contas', icon: Users, space: 'administration', index: '16' },
 ] as const
 
 const mobileDock = routeMeta.slice(0, 5)
@@ -64,7 +75,7 @@ export function DashboardLayout({
   } as CSSProperties
 
   useEffect(() => {
-    const media = window.matchMedia('(min-width: 1024px)')
+    const media = window.matchMedia('(min-width: 1280px)')
     const syncViewport = () => setIsDesktop(media.matches)
     syncViewport()
     media.addEventListener('change', syncViewport)
@@ -192,6 +203,8 @@ export function DashboardLayout({
             <span className="min-w-0 flex-1 truncate text-left">Buscar no seu códice</span>
             <kbd className="shell-search__key">Ctrl K</kbd>
           </Link>
+
+          <NotificationBell />
 
           <Link href="/perfil" className="shell-profile" aria-label="Abrir perfil">
             <span

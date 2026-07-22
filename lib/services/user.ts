@@ -6,6 +6,7 @@ import { ApiErrors } from '@/lib/http'
 import { prisma } from '@/lib/prisma'
 import { destroyAllUserSessions, type AuthUser } from '@/lib/auth'
 import { hashPassword, normalizeUsername, verifyPasswordHash } from '@/lib/password'
+import { ensureUniquePublicId } from '@/lib/public-id'
 import { runById } from '@/lib/services/prisma-errors'
 import type {
   accountCreateSchema,
@@ -26,6 +27,9 @@ const USER_PUBLIC_SELECT = {
   avatarUrl: true,
   accentColor: true,
   locale: true,
+  publicId: true,
+  isSearchable: true,
+  profileVisibility: true,
   isActive: true,
   lastLoginAt: true,
   createdAt: true,
@@ -96,6 +100,7 @@ export const UserService = {
           passwordHash: await hashPassword(input.password),
           displayName: input.displayName?.trim() || input.username.trim(),
           role: input.role,
+          publicId: await ensureUniquePublicId(),
         },
         select: USER_PUBLIC_SELECT,
       })

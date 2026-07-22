@@ -75,7 +75,7 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
       <div
         aria-live="polite"
         aria-atomic="false"
-        className="pointer-events-none fixed inset-x-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-[140] ml-auto flex max-w-sm flex-col gap-2.5 sm:inset-x-auto sm:right-6 sm:bottom-6 sm:w-full"
+        className="toast-region pointer-events-none fixed inset-x-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-[140] ml-auto flex max-w-sm flex-col gap-2.5 sm:inset-x-auto sm:right-6 sm:bottom-6 sm:w-full"
       >
         <AnimatePresence initial={false}>
           {toasts.map((item) => {

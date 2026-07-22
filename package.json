@@ -17,6 +17,7 @@
     "check:production-env": "node scripts/check-production-env.mjs",
     "migrate:accounts": "node --env-file-if-exists=.env scripts/migrate-to-accounts.mjs",
     "verify:migration": "node --env-file-if-exists=.env scripts/verify-account-migration.mjs",
+    "backfill:public-ids": "node --env-file-if-exists=.env scripts/backfill-public-ids.mjs",
     "db:studio": "prisma studio",
     "db:push": "prisma db push",
     "postinstall": "prisma generate",

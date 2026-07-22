@@ -41,7 +41,7 @@ const securityHeaders = [
 ]
 
 const protectedPrefixes = [
-  'dashboard', 'biblia', 'busca', 'sermoes', 'ebd', 'esbocos', 'anotacoes', 'teologia', 'tutor', 'perfil', 'contas',
+  'dashboard', 'biblia', 'hinos', 'planos', 'busca', 'sermoes', 'ebd', 'esbocos', 'anotacoes', 'teologia', 'tutor', 'amigos', 'u', 'conversas', 'notificacoes', 'perfil', 'contas',
 ]
 
 const nextConfig: NextConfig = {
@@ -49,6 +49,18 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   productionBrowserSourceMaps: false,
   serverExternalPackages: ['@prisma/client', 'prisma', 'pdf-parse'],
+  // Estes JSON são lidos em runtime via fs/process.cwd(), então o tracer estático
+  // não os detecta. Sem isso, o build `standalone` não os copia e as leituras
+  // falham em produção. Chaves são globs de rota (picomatch); use `*` porque
+  // colchetes de rotas dinâmicas seriam interpretados como classes de caractere.
+  outputFileTracingIncludes: {
+    '/hinos': ['./Harpa.json'],
+    '/hinos/*': ['./Harpa.json'],
+    '/api/hinos': ['./Harpa.json'],
+    '/api/hinos/*': ['./Harpa.json'],
+    '/api/hinos/*/favoritar': ['./Harpa.json'],
+    '/api/bible/*/*/*': ['./Versions/**'],
+  },
   allowedDevOrigins,
   async headers() {
     return [

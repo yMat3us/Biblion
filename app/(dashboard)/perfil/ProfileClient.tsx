@@ -1,16 +1,24 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   AtSign,
+  Check,
+  Eye,
   Fingerprint,
+  Globe,
+  ImagePlus,
   KeyRound,
   LockKeyhole,
   Palette,
   Save,
+  Search,
   ShieldCheck,
+  Trash2,
   UserRound,
+  Users,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { SectionHeading, WorkspacePage } from '@/components/layout/WorkspacePage'
@@ -19,7 +27,34 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Textarea } from '@/components/ui/Textarea'
 import { useToast } from '@/components/ui/Feedback'
-import { ACCENT_OPTIONS, ROLE_LABELS, userInitial, type CurrentUserView, type UserAccent } from '@/types/auth'
+import { ACCENT_OPTIONS, accentFor, isHexColor, ROLE_LABELS, userInitial, type CurrentUserView, type ProfileVisibility } from '@/types/auth'
+
+const HEX_PATTERN = /^#[0-9a-fA-F]{6}$/
+
+/** Lê um arquivo de imagem e devolve um data URL JPEG quadrado e compacto (recorte cover). */
+async function imagemParaDataUrl(file: File, size = 288): Promise<string> {
+  const bitmap = await createImageBitmap(file)
+  try {
+    const canvas = document.createElement('canvas')
+    canvas.width = size
+    canvas.height = size
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('canvas-indisponivel')
+    const scale = Math.max(size / bitmap.width, size / bitmap.height)
+    const largura = bitmap.width * scale
+    const altura = bitmap.height * scale
+    ctx.drawImage(bitmap, (size - largura) / 2, (size - altura) / 2, largura, altura)
+    return canvas.toDataURL('image/jpeg', 0.82)
+  } finally {
+    bitmap.close()
+  }
+}
+
+const VISIBILITY_OPTIONS: Array<{ value: ProfileVisibility; label: string; icon: typeof Globe }> = [
+  { value: 'PUBLIC', label: 'Todos', icon: Globe },
+  { value: 'FRIENDS', label: 'Amigos', icon: Users },
+  { value: 'PRIVATE', label: 'Só eu', icon: LockKeyhole },
+]
 
 interface ApiErrorBody { error?: { message?: string } }
 
@@ -27,7 +62,9 @@ interface ProfileForm {
   displayName: string
   bio: string
   avatarUrl: string
-  accentColor: UserAccent
+  accentColor: string
+  isSearchable: boolean
+  profileVisibility: ProfileVisibility
 }
 
 async function errorMessage(response: Response, fallback: string) {
@@ -40,7 +77,9 @@ function profileFromUser(user: CurrentUserView): ProfileForm {
     displayName: user.displayName ?? '',
     bio: user.bio ?? '',
     avatarUrl: user.avatarUrl ?? '',
-    accentColor: user.accentColor as UserAccent,
+    accentColor: user.accentColor,
+    isSearchable: user.isSearchable,
+    profileVisibility: user.profileVisibility,
   }
 }
 
@@ -53,9 +92,42 @@ export function ProfileClient({ user: initialUser }: { user: CurrentUserView }) 
   const [password, setPassword] = useState({ currentPassword: '', newPassword: '', confirmation: '' })
   const [savingProfile, setSavingProfile] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
+  const [processingImage, setProcessingImage] = useState(false)
+  const [hexDraft, setHexDraft] = useState(() => accentFor(initialUser.accentColor).color)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const profileDirty = JSON.stringify(profile) !== JSON.stringify(savedProfile)
   const passwordMismatch = Boolean(password.confirmation && password.newPassword !== password.confirmation)
+  const accent = accentFor(profile.accentColor)
+  const isCustomAccent = isHexColor(profile.accentColor)
+  const isDataAvatar = profile.avatarUrl.startsWith('data:')
+
+  async function handleAvatarFile(file: File | null) {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      toast.error('Selecione um arquivo de imagem.')
+      return
+    }
+    if (file.size > 12 * 1024 * 1024) {
+      toast.error('Imagem muito grande. Escolha uma foto de até 12 MB.')
+      return
+    }
+    setProcessingImage(true)
+    try {
+      const dataUrl = await imagemParaDataUrl(file)
+      setProfile((value) => ({ ...value, avatarUrl: dataUrl }))
+    } catch {
+      toast.error('Não foi possível processar a imagem.')
+    } finally {
+      setProcessingImage(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  function applyAccent(next: string) {
+    setProfile((value) => ({ ...value, accentColor: next }))
+    setHexDraft(accentFor(next).color)
+  }
 
   async function saveProfile(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -133,7 +205,7 @@ export function ProfileClient({ user: initialUser }: { user: CurrentUserView }) 
         }
       />
 
-      <div className="administration-workspace grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(19rem,0.75fr)]">
+      <div className="administration-workspace grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(19rem,0.75fr)]">
         <form id="profile-form" onSubmit={saveProfile} className="profile-form form-section form-section--accent space-y-7">
           <SectionHeading
             icon={UserRound}
@@ -155,7 +227,24 @@ export function ProfileClient({ user: initialUser }: { user: CurrentUserView }) 
                 <Badge variant="outline">{ROLE_LABELS[user.role]}</Badge>
               </div>
               <p className="mt-1 text-sm text-muted-foreground">@{user.username}</p>
-              <p className="mt-3 max-w-xl text-xs leading-relaxed text-subtle">A imagem é exibida localmente a partir de uma URL HTTPS. Se preferir, deixe o campo vazio para usar suas iniciais.</p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  onChange={(event) => handleAvatarFile(event.target.files?.[0] ?? null)}
+                />
+                <Button type="button" variant="secondary" size="sm" loading={processingImage} onClick={() => fileInputRef.current?.click()}>
+                  <ImagePlus size={15} /> Enviar foto
+                </Button>
+                {profile.avatarUrl && (
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setProfile((value) => ({ ...value, avatarUrl: '' }))}>
+                    <Trash2 size={14} /> Remover
+                  </Button>
+                )}
+              </div>
+              <p className="mt-2 max-w-xl text-xs leading-relaxed text-subtle">Escolha uma foto do seu dispositivo (recortada e otimizada automaticamente) ou cole uma URL HTTPS abaixo.</p>
             </div>
           </div>
 
@@ -170,13 +259,13 @@ export function ProfileClient({ user: initialUser }: { user: CurrentUserView }) 
               placeholder="Como devemos chamar você?"
             />
             <Input
-              label="Avatar por URL HTTPS"
+              label="Ou avatar por URL HTTPS"
               type="url"
-              value={profile.avatarUrl}
+              value={isDataAvatar ? '' : profile.avatarUrl}
               onChange={(event) => setProfile((value) => ({ ...value, avatarUrl: event.target.value }))}
               maxLength={500}
               icon={<AtSign size={16} />}
-              placeholder="https://…"
+              placeholder={isDataAvatar ? 'Foto enviada do dispositivo' : 'https://…'}
             />
           </div>
 
@@ -194,7 +283,7 @@ export function ProfileClient({ user: initialUser }: { user: CurrentUserView }) 
             <legend className="px-2 text-sm font-medium text-foreground">
               <span className="flex items-center gap-2"><Palette size={16} className="text-primary" /> Cor de destaque</span>
             </legend>
-            <p className="mb-4 text-xs leading-relaxed text-subtle">Sua escolha acompanha botões, foco e detalhes de navegação em todo o produto.</p>
+            <p className="mb-4 text-xs leading-relaxed text-subtle">Sua escolha acompanha botões, foco e detalhes de navegação em todo o produto. Use um preset ou defina um código hex livre.</p>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {ACCENT_OPTIONS.map((option) => (
                 <label key={option.value} className="cursor-pointer">
@@ -203,13 +292,95 @@ export function ProfileClient({ user: initialUser }: { user: CurrentUserView }) 
                     name="accent"
                     value={option.value}
                     checked={profile.accentColor === option.value}
-                    onChange={() => setProfile((value) => ({ ...value, accentColor: option.value }))}
+                    onChange={() => applyAccent(option.value)}
                     className="peer sr-only"
                   />
                   <span className="flex min-h-12 items-center gap-3 rounded-xl border border-hairline bg-surface/55 px-3 text-xs font-medium text-muted-foreground transition-all hover:border-hairline-strong hover:bg-elevated peer-checked:border-primary/40 peer-checked:bg-primary-soft peer-checked:text-foreground peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background">
                     <span className="h-4 w-4 rounded-full ring-2 ring-white/10" style={{ backgroundColor: option.color }} />
                     {option.label}
                     {profile.accentColor === option.value && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            <div className={`mt-3 rounded-xl border bg-surface/55 p-3 transition-colors ${isCustomAccent ? 'border-primary/40' : 'border-hairline'}`}>
+              <div className="flex items-center gap-3">
+                <label
+                  className="relative flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-hairline-strong ring-2 ring-white/10"
+                  style={{ backgroundColor: accent.color }}
+                >
+                  <input
+                    type="color"
+                    value={accent.color}
+                    onChange={(event) => applyAccent(event.target.value)}
+                    className="absolute inset-0 cursor-pointer opacity-0"
+                    aria-label="Escolher cor personalizada"
+                  />
+                </label>
+                <div className="min-w-0 flex-1">
+                  <label htmlFor="accent-hex" className="text-xs font-medium text-muted-foreground">Cor personalizada (código hex)</label>
+                  <input
+                    id="accent-hex"
+                    value={hexDraft}
+                    onChange={(event) => {
+                      const next = event.target.value
+                      setHexDraft(next)
+                      if (HEX_PATTERN.test(next.trim())) setProfile((value) => ({ ...value, accentColor: next.trim() }))
+                    }}
+                    placeholder="#7c6cf6"
+                    spellCheck={false}
+                    autoCapitalize="none"
+                    maxLength={7}
+                    className="mt-1 h-11 w-full rounded-lg border border-hairline-strong bg-background/48 px-3 font-mono text-sm text-foreground shadow-[inset_0_1px_2px_rgb(0_0_0/0.32)] transition-colors placeholder:text-subtle focus-visible:border-primary/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/16"
+                  />
+                </div>
+                {isCustomAccent && <span className="flex items-center gap-1 self-end pb-1 text-xs font-medium text-primary"><Check size={14} /> Ativa</span>}
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset className="rounded-2xl border border-hairline bg-background/30 p-4 sm:p-5">
+            <legend className="px-2 text-sm font-medium text-foreground">
+              <span className="flex items-center gap-2"><Globe size={16} className="text-primary" /> Perfil público e privacidade</span>
+            </legend>
+
+            {user.publicId && (
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-hairline bg-surface/60 p-3.5">
+                <div className="min-w-0">
+                  <p className="text-xs text-subtle">Seu ID público</p>
+                  <p className="font-mono text-sm text-foreground">{user.publicId}</p>
+                </div>
+                <Link href={`/u/${user.publicId}`} className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:text-primary-hover">
+                  <Eye size={14} /> Ver meu perfil público
+                </Link>
+              </div>
+            )}
+
+            <label className="mb-5 flex cursor-pointer items-center justify-between gap-3">
+              <span className="flex items-center gap-2 text-sm text-foreground"><Search size={15} className="text-subtle" /> Aparecer na busca de usuários</span>
+              <input
+                type="checkbox"
+                checked={profile.isSearchable}
+                onChange={(event) => setProfile((value) => ({ ...value, isSearchable: event.target.checked }))}
+                className="h-5 w-5 accent-[var(--color-primary)]"
+              />
+            </label>
+
+            <p className="mb-2 text-sm text-foreground">Quem pode ver seu perfil e conteúdo público</p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {VISIBILITY_OPTIONS.map((option) => (
+                <label key={option.value} className="cursor-pointer">
+                  <input
+                    type="radio"
+                    name="profileVisibility"
+                    value={option.value}
+                    checked={profile.profileVisibility === option.value}
+                    onChange={() => setProfile((value) => ({ ...value, profileVisibility: option.value }))}
+                    className="peer sr-only"
+                  />
+                  <span className="flex min-h-12 items-center gap-2 rounded-xl border border-hairline bg-surface/55 px-3 text-xs font-medium text-muted-foreground transition-all hover:border-hairline-strong peer-checked:border-primary/40 peer-checked:bg-primary-soft peer-checked:text-foreground">
+                    <option.icon size={15} /> {option.label}
                   </span>
                 </label>
               ))}

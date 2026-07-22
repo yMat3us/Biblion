@@ -29,17 +29,34 @@ export const loginSchema = z.object({ username, password })
 export const USER_ACCENT_COLORS = ['violet', 'blue', 'emerald', 'amber', 'rose'] as const
 export const USER_ROLES = ['OWNER', 'ADMIN', 'MEMBER'] as const
 
+export const CONTENT_VISIBILITY = ['PRIVATE', 'FRIENDS', 'PUBLIC'] as const
+
 export const profileUpdateSchema = z.object({
   displayName: z.string().trim().min(1).max(80).optional(),
   bio: z.string().trim().max(500).optional(),
   avatarUrl: z
     .string()
     .trim()
-    .max(500)
-    .refine((value) => value === '' || value.startsWith('https://'), 'O avatar deve usar HTTPS')
+    .max(1_500_000)
+    .refine(
+      (value) =>
+        value === '' ||
+        value.startsWith('https://') ||
+        /^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/.test(value),
+      'A foto deve ser um upload de imagem válido ou uma URL HTTPS',
+    )
     .optional(),
-  accentColor: z.enum(USER_ACCENT_COLORS).optional(),
+  accentColor: z
+    .string()
+    .trim()
+    .refine(
+      (value) => (USER_ACCENT_COLORS as readonly string[]).includes(value) || /^#[0-9a-fA-F]{6}$/.test(value),
+      'Cor de destaque inválida',
+    )
+    .optional(),
   locale: z.enum(['pt-BR']).optional(),
+  isSearchable: z.boolean().optional(),
+  profileVisibility: z.enum(CONTENT_VISIBILITY).optional(),
 })
 
 export const changePasswordSchema = z.object({
@@ -77,6 +94,7 @@ export const sermaoCreateSchema = z.object({
   categoria: z.string().max(100).nullish(),
   tags: z.string().max(2_000).nullish(),
   publicado: z.boolean().optional().default(false),
+  visibility: z.enum(CONTENT_VISIBILITY).optional(),
 })
 export const sermaoUpdateSchema = sermaoCreateSchema.partial()
 
@@ -207,4 +225,122 @@ export const bibleParamsSchema = z.object({
 export const paginationSchema = z.object({
   page: z.coerce.number().int().min(1).optional().default(1),
   pageSize: z.coerce.number().int().min(1).max(50).optional().default(20),
+})
+
+// ---------------------------------------------------------------------------
+// Hinos (Harpa Cristã e futuros hinários)
+// ---------------------------------------------------------------------------
+export const HYMNALS = ['harpa'] as const
+
+export const hinoListQuerySchema = z.object({
+  hinario: z.enum(HYMNALS).optional().default('harpa'),
+  q: z.string().trim().max(120).optional().default(''),
+  categoria: z.string().trim().max(80).optional().default(''),
+  // Query strings chegam como texto; "false" é truthy, então comparamos explicitamente.
+  favoritos: z
+    .enum(['true', 'false'])
+    .optional()
+    .default('false')
+    .transform((value) => value === 'true'),
+})
+
+export const hinoParamsSchema = z.object({
+  numero: z.coerce.number().int().min(1).max(2_000),
+})
+
+export const hinoFavoritoSchema = z.object({
+  hinario: z.enum(HYMNALS).optional().default('harpa'),
+  favoritar: z.boolean(),
+})
+
+// ---------------------------------------------------------------------------
+// Planos de leitura (online e sociais)
+// ---------------------------------------------------------------------------
+// FRIENDS fica reservado no schema Prisma, mas a criação só expõe PRIVATE/PUBLIC
+// enquanto o sistema de amizades não existir (evita prometer o que não entrega).
+export const PLAN_VISIBILITY = ['PRIVATE', 'PUBLIC'] as const
+
+export const planDaySchema = z.object({
+  dia: z.number().int().min(1).max(400),
+  titulo: z.string().trim().max(200).nullish(),
+  referencia: z.string().trim().min(1, 'Informe a referência bíblica').max(300),
+  reflexao: z.string().trim().min(1, 'Escreva a reflexão do dia').max(8_000),
+  pergunta: z.string().trim().max(2_000).nullish(),
+  acao: z.string().trim().max(2_000).nullish(),
+  oracao: z.string().trim().max(4_000).nullish(),
+})
+
+export const planoCreateSchema = z.object({
+  titulo: z.string().trim().min(1, 'Título é obrigatório').max(200),
+  descricao: z.string().trim().max(2_000).nullish(),
+  categoria: z.string().trim().max(80).nullish(),
+  capaCor: z.string().trim().max(20).nullish(),
+  visibility: z.enum(PLAN_VISIBILITY).optional().default('PRIVATE'),
+  dias: z.array(planDaySchema).min(1, 'Adicione ao menos um dia').max(400),
+})
+
+export const planoUpdateSchema = z
+  .object({
+    titulo: z.string().trim().min(1).max(200).optional(),
+    descricao: z.string().trim().max(2_000).nullish(),
+    categoria: z.string().trim().max(80).nullish(),
+    capaCor: z.string().trim().max(20).nullish(),
+    visibility: z.enum(PLAN_VISIBILITY).optional(),
+    dias: z.array(planDaySchema).min(1).max(400).optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, 'Informe ao menos uma alteração')
+
+export const planoListQuerySchema = z.object({
+  escopo: z.enum(['catalogo', 'meus', 'concluidos', 'criados']).optional().default('catalogo'),
+  categoria: z.string().trim().max(80).optional().default(''),
+  q: z.string().trim().max(120).optional().default(''),
+})
+
+export const planoFavoritoSchema = z.object({ favoritar: z.boolean() })
+
+export const planoDiaConcluirSchema = z.object({ concluido: z.boolean() })
+
+export const planoDiaParamsSchema = z.object({
+  dia: z.coerce.number().int().min(1).max(400),
+})
+
+export const aiPlanoSchema = z.object({
+  tema: z.string().trim().min(3, 'Descreva o tema do plano').max(300),
+  dias: z.coerce.number().int().min(1).max(30),
+  visibility: z.enum(PLAN_VISIBILITY).optional().default('PRIVATE'),
+})
+
+// ---------------------------------------------------------------------------
+// Social: busca de usuários, amizades e bloqueio
+// ---------------------------------------------------------------------------
+// IDs de conta são ObjectId (24 hex); o teto de 50 é folga com segurança.
+const userId = z.string().trim().min(1).max(50)
+
+export const userSearchSchema = z.object({
+  q: z.string().trim().min(2, 'Digite ao menos 2 caracteres').max(80),
+})
+
+export const amigoSolicitarSchema = z.object({ alvoId: userId })
+export const amigoResponderSchema = z.object({ solicitanteId: userId, aceitar: z.boolean() })
+export const amigoRemoverSchema = z.object({ alvoId: userId })
+export const bloquearSchema = z.object({ alvoId: userId, bloquear: z.boolean() })
+export const amigosListaQuerySchema = z.object({
+  escopo: z.enum(['amigos', 'recebidas', 'enviadas']).optional().default('amigos'),
+})
+
+// ---------------------------------------------------------------------------
+// Chat e notificações
+// ---------------------------------------------------------------------------
+export const conversaStartSchema = z.object({ alvoId: userId })
+
+export const mensagemEnviarSchema = z.object({
+  corpo: z.string().trim().min(1, 'Escreva uma mensagem').max(4_000),
+})
+
+export const conversaSinceSchema = z.object({
+  since: z.string().datetime().optional(),
+})
+
+export const notificacaoLerSchema = z.object({
+  id: z.string().trim().max(50).optional(),
 })
