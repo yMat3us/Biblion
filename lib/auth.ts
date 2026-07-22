@@ -152,7 +152,9 @@ export async function destroyAllUserSessions(userId: string): Promise<void> {
 }
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? ''
-const secureCookie = process.env.NODE_ENV === 'production' || siteUrl.startsWith('https://')
+const secureCookie = siteUrl
+  ? siteUrl.startsWith('https://')
+  : process.env.NODE_ENV === 'production'
 
 const cookieBase = {
   httpOnly: true,
