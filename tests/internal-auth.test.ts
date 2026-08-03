@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { NextRequest } from 'next/server'
 import { assertInternalSecret } from '@/lib/internal-auth'
 
-const SECRET = 'super-secret-cron-value-0123456789'
+const SECRET = 'fake-32-char-cron-secret-for-test!'
 
 function reqWith(headers: Record<string, string>): NextRequest {
   return { headers: new Headers(headers) } as unknown as NextRequest

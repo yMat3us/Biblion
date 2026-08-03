@@ -40,10 +40,10 @@ describe('logger — redação de segredos e PII', () => {
   it('logger.error emite UMA linha JSON estruturada e redigida', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
-      logger.error('unit_event', { token: 'supersecret-value', keep: 'ok' })
+      logger.error('unit_event', { token: 'fake-token-value', keep: 'ok' })
       expect(spy).toHaveBeenCalledTimes(1)
       const line = spy.mock.calls[0][0] as string
-      expect(line).not.toContain('supersecret-value')
+      expect(line).not.toContain('fake-token-value')
       expect(JSON.parse(line)).toMatchObject({ level: 'error', event: 'unit_event', keep: 'ok', token: '[REDACTED]' })
     } finally {
       spy.mockRestore()

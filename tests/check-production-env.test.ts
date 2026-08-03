@@ -11,7 +11,7 @@ const validProductionEnv: NodeJS.ProcessEnv = {
   GOOGLE_GENERATIVE_AI_API_KEY: 'ci-placeholder',
   UPSTASH_REDIS_REST_URL: 'https://redis.example.invalid',
   UPSTASH_REDIS_REST_TOKEN: 'ci-placeholder', // gitleaks:allow
-  CRON_SECRET: '0123456789abcdef0123456789abcdef', // gitleaks:allow
+  CRON_SECRET: 'fake-32-char-cron-secret-for-test!', // gitleaks:allow
 }
 
 /** Clona a base de produção removendo as chaves indicadas (sem variáveis órfãs). */
@@ -86,7 +86,7 @@ describe('validateProductionEnv — contrato de produção', () => {
     })
 
     it('aceita segredo com 32 caracteres', () => {
-      const { errors } = validateProductionEnv(envWith({ CRON_SECRET: 'x'.repeat(32) }))
+      const { errors } = validateProductionEnv(envWith({ CRON_SECRET: 'this-is-a-valid-fake-cron-secret' }))
       expect(errors).toEqual([])
     })
   })

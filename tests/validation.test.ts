@@ -99,7 +99,7 @@ describe('request validation', () => {
     // Data-URL attachments cannot be arbitrarily large.
     expect(() =>
       uiChatSchema.parse({
-        messages: [{ role: 'user', parts: [{ type: 'file', mediaType: 'image/png', url: `data:image/png;base64,${'A'.repeat(2_000_001)}` }] }],
+        messages: [{ role: 'user', parts: [{ type: 'file', mediaType: 'image/png', url: `data:image/png;base64,${'A'.repeat(30_000_000)}` }] }],
       }),
     ).toThrow(ZodError)
   })

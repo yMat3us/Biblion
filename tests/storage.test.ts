@@ -7,7 +7,7 @@ const config = {
   region: 'auto',
   bucket: 'biblion',
   accessKeyId: 'AKIAEXAMPLE',
-  secretAccessKey: 'secretexamplekey',
+  secretAccessKey: 'dummy-storage-key',
   publicBaseUrl: 'https://cdn.example.com',
 }
 
