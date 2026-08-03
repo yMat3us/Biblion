@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#08090c">
+  <title>Biblion — Offline</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    body { min-height: 100vh; margin: 0; display: grid; place-items: center; background: #08090c; color: #f3f4f7; }
+    main { max-width: 28rem; padding: 2rem; text-align: center; }
+    h1 { font-size: 1.5rem; margin: 0 0 .75rem; }
+    p { color: #9aa1ad; line-height: 1.6; }
+    button { margin-top: 1rem; border: 0; border-radius: .6rem; padding: .7rem 1rem; background: #7c6cf6; color: white; font-weight: 600; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Você está offline</h1>
+    <p>Por segurança, páginas com dados da sua conta não são armazenadas no cache. Reconecte-se para acessar o Biblion.</p>
+    <button type="button" onclick="location.reload()">Tentar novamente</button>
+  </main>
+</body>
+</html>

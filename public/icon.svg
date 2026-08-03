@@ -1,0 +1,20 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="biblion-bg" x1="64" y1="32" x2="448" y2="480" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8F81FF"/>
+      <stop offset="1" stop-color="#5B4FD6"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#biblion-bg)"/>
+  <!-- Left page -->
+  <path d="M256 172C210 150 160 146 122 156C116 158 112 163 112 170L112 348C112 355 117 360 124 359C168 351 214 356 256 380Z" fill="#F4F1EA"/>
+  <!-- Right page -->
+  <path d="M256 172C302 150 352 146 390 156C396 158 400 163 400 170L400 348C400 355 395 360 388 359C344 351 298 356 256 380Z" fill="#F4F1EA"/>
+  <!-- Faint text lines (left) -->
+  <path d="M150 216H228" stroke="#7C6CF6" stroke-opacity="0.28" stroke-width="9" stroke-linecap="round"/>
+  <path d="M150 252H222" stroke="#7C6CF6" stroke-opacity="0.28" stroke-width="9" stroke-linecap="round"/>
+  <!-- Center spine -->
+  <path d="M256 172V380" stroke="#5B4FD6" stroke-opacity="0.4" stroke-width="9" stroke-linecap="round"/>
+  <!-- Gold bookmark ribbon -->
+  <path d="M300 150H340V250L320 232L300 250Z" fill="#D8B36A"/>
+</svg>

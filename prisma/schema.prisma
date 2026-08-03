@@ -1,0 +1,465 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+/// Escopo de visibilidade compartilhado por todo conteúdo que pode aparecer
+/// em um perfil público. PRIVATE é o padrão seguro em qualquer criação.
+enum Visibility {
+  PRIVATE
+  FRIENDS
+  PUBLIC
+}
+
+model User {
+  id                 String        @id @default(auto()) @map("_id") @db.ObjectId
+  username           String
+  usernameNormalized String        @unique
+  passwordHash       String
+  authVersion        Int           @default(0)
+  role               UserRole      @default(MEMBER)
+  displayName        String?
+  bio                String?
+  avatarUrl          String?
+  accentColor        String        @default("violet")
+  locale             String        @default("pt-BR")
+  isActive           Boolean       @default(true)
+  // Identidade social pública e controles de descoberta. Contas novas nascem
+  // privadas por padrão (visíveis só a amigos e não pesquisáveis); o usuário
+  // opta por expor o perfil. Contas existentes mantêm o valor já persistido —
+  // trocar o @default não altera documentos antigos (default só vale na criação).
+  publicId           String?       @unique
+  isSearchable       Boolean       @default(false)
+  profileVisibility  Visibility    @default(FRIENDS)
+  lastLoginAt        DateTime?
+  // Marca de anonimização (LGPD): quando presente, a conta foi excluída pelo
+  // titular — PII zerada, conteúdo próprio apagado, sessões revogadas.
+  deletedAt          DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  sessions           UserSession[]
+  sermoes            Sermao[]
+  esbocos            Esboco[]
+  anotacoes          Anotacao[]
+  favoritos          Favorito[]
+  revistas           RevistaEBD[]
+  licoes             LicaoEBD[]
+  configuracoes      Configuracao[]
+  // Planos de leitura (autoria e matrículas de progresso).
+  readingPlans       ReadingPlan[]
+  planEnrollments    PlanEnrollment[]
+  // Social e comunicação.
+  friendshipsSent     Friendship[]              @relation("FriendshipRequester")
+  friendshipsReceived Friendship[]              @relation("FriendshipAddressee")
+  blocksInitiated     Block[]                   @relation("BlockBlocker")
+  blocksReceived      Block[]                   @relation("BlockBlocked")
+  conversations       ConversationParticipant[]
+  messages            Message[]
+  notifications       Notification[]            @relation("NotificationRecipient")
+  notificationsActed  Notification[]            @relation("NotificationActor")
+
+  @@index([role, isActive])
+  @@index([isSearchable])
+}
+
+model UserSession {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  tokenHash   String   @unique
+  userId      String   @db.ObjectId
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  authVersion Int      @default(0)
+  userAgent   String?
+  expiresAt   DateTime
+  lastSeenAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+}
+
+model Sermao {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  ownerId     String   @db.ObjectId
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  titulo      String
+  tema        String?
+  textoBase   String
+  introducao  String?
+  topicos     String?
+  conclusao   String?
+  aplicacao   String?
+  categoria   String?
+  tags        String?
+  publicado   Boolean  @default(false)
+  visibility  Visibility @default(PRIVATE)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([ownerId, updatedAt])
+  @@index([visibility, updatedAt])
+}
+
+model Esboco {
+  id         String     @id @default(auto()) @map("_id") @db.ObjectId
+  ownerId    String     @db.ObjectId
+  owner      User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  titulo     String
+  textoBase  String?
+  conteudo   String
+  modelo     String?
+  categoria  String?
+  visibility Visibility @default(PRIVATE)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@index([ownerId, updatedAt])
+  @@index([visibility, updatedAt])
+}
+
+model Anotacao {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  ownerId    String   @db.ObjectId
+  owner      User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  titulo     String?
+  conteudo   String
+  livro      String?
+  capitulo   Int?
+  versiculo  Int?
+  referencia String?
+  tipo       String   @default("geral")
+  tags       String[] @default([])
+  fixada     Boolean  @default(false)
+  cor        String   @default("default")
+  visibility Visibility @default(PRIVATE)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([ownerId, updatedAt])
+  @@index([ownerId, livro, capitulo, versiculo])
+  @@index([visibility, updatedAt])
+}
+
+/// Favorito genérico e reutilizável (hinos, planos, referências bíblicas...).
+/// `tipo` discrimina o recurso e `referencia` guarda seu identificador.
+model Favorito {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  ownerId    String   @db.ObjectId
+  owner      User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  tipo       String
+  referencia String
+  titulo     String?
+  createdAt  DateTime @default(now())
+
+  @@unique([ownerId, tipo, referencia])
+  @@index([ownerId, tipo, createdAt])
+}
+
+model RevistaEBD {
+  id        String     @id @default(auto()) @map("_id") @db.ObjectId
+  ownerId   String     @db.ObjectId
+  owner     User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  titulo    String
+  trimestre String?
+  ano       String?
+  tema      String?
+  capa      String?
+  licoes    LicaoEBD[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([ownerId, createdAt])
+}
+
+model LicaoEBD {
+  id          String      @id @default(auto()) @map("_id") @db.ObjectId
+  ownerId     String      @db.ObjectId
+  owner       User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  numero      Int?
+  titulo      String
+  data        DateTime?
+  revistaId   String?     @db.ObjectId
+  revista     RevistaEBD? @relation(fields: [revistaId], references: [id], onDelete: Cascade)
+  textoBase   String?
+  objetivos   String?
+  introducao  String?
+  topicos     String?
+  conclusao   String?
+  perguntas   String?
+  resumo      String?
+  aplicacao   String?
+  esboco      String?
+  conteudoRaw String?
+  arquivo     String?
+  visibility  Visibility  @default(PRIVATE)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([ownerId, createdAt])
+  @@index([ownerId, revistaId])
+  @@index([visibility, updatedAt])
+}
+
+model Configuracao {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  ownerId   String   @db.ObjectId
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  chave     String
+  valor     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([ownerId, chave])
+  @@index([ownerId, updatedAt])
+}
+
+// ===========================================================================
+// Planos de leitura (online e sociais)
+// ===========================================================================
+enum PlanSource {
+  USER
+  AI
+  OFFICIAL
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+}
+
+model ReadingPlan {
+  id          String           @id @default(auto()) @map("_id") @db.ObjectId
+  ownerId     String           @db.ObjectId
+  owner       User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  titulo      String
+  descricao   String?
+  categoria   String?
+  capaCor     String?
+  duracaoDias Int              @default(0)
+  visibility  Visibility       @default(PRIVATE)
+  source      PlanSource       @default(USER)
+  oficial     Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  dias        PlanDay[]
+  enrollments PlanEnrollment[]
+
+  @@index([visibility, categoria])
+  @@index([ownerId, updatedAt])
+  // Índice de texto do MongoDB para a busca do catálogo público (titulo/descricao).
+  // Consultado via $text (findRaw) em PlanoService.listCatalog.
+  @@fulltext([titulo, descricao])
+}
+
+model PlanDay {
+  id         String      @id @default(auto()) @map("_id") @db.ObjectId
+  planId     String      @db.ObjectId
+  plan       ReadingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  dia        Int
+  titulo     String?
+  referencia String
+  reflexao   String
+  pergunta   String?
+  acao       String?
+  oracao     String?
+  createdAt  DateTime    @default(now())
+
+  @@unique([planId, dia])
+  @@index([planId])
+}
+
+model PlanEnrollment {
+  id             String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId         String           @db.ObjectId
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId         String           @db.ObjectId
+  plan           ReadingPlan      @relation(fields: [planId], references: [id], onDelete: Cascade)
+  status         EnrollmentStatus @default(ACTIVE)
+  diaAtual       Int              @default(1)
+  favorito       Boolean          @default(false)
+  startedAt      DateTime         @default(now())
+  lastActivityAt DateTime         @default(now())
+  completedAt    DateTime?
+  progresso      DayProgress[]
+
+  @@unique([userId, planId])
+  @@index([userId, status])
+  @@index([planId])
+}
+
+model DayProgress {
+  id           String         @id @default(auto()) @map("_id") @db.ObjectId
+  enrollmentId String         @db.ObjectId
+  enrollment   PlanEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  dia          Int
+  completedAt  DateTime       @default(now())
+
+  @@unique([enrollmentId, dia])
+}
+
+// ===========================================================================
+// Social: amizades (baseadas em consentimento) e bloqueio
+// ===========================================================================
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+}
+
+model Friendship {
+  id          String           @id @default(auto()) @map("_id") @db.ObjectId
+  requesterId String           @db.ObjectId
+  requester   User             @relation("FriendshipRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addresseeId String           @db.ObjectId
+  addressee   User             @relation("FriendshipAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+  status      FriendshipStatus @default(PENDING)
+  createdAt   DateTime         @default(now())
+  respondedAt DateTime?
+
+  @@unique([requesterId, addresseeId])
+  @@index([addresseeId, status])
+  @@index([requesterId, status])
+}
+
+model Block {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  blockerId String   @db.ObjectId
+  blocker   User     @relation("BlockBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId String   @db.ObjectId
+  blocked   User     @relation("BlockBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([blockerId, blockedId])
+  @@index([blockedId])
+}
+
+// ===========================================================================
+// Comunicação: conversas 1:1 (com estrutura pronta para grupos)
+// ===========================================================================
+model Conversation {
+  id            String                    @id @default(auto()) @map("_id") @db.ObjectId
+  isGroup       Boolean                   @default(false)
+  titulo        String?
+  createdAt     DateTime                  @default(now())
+  lastMessageAt DateTime                  @default(now())
+  participants  ConversationParticipant[]
+  messages      Message[]
+
+  @@index([lastMessageAt])
+}
+
+model ConversationParticipant {
+  id             String       @id @default(auto()) @map("_id") @db.ObjectId
+  conversationId String       @db.ObjectId
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String       @db.ObjectId
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt       DateTime     @default(now())
+  lastReadAt     DateTime?
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             String       @id @default(auto()) @map("_id") @db.ObjectId
+  conversationId String       @db.ObjectId
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String       @db.ObjectId
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  corpo          String
+  createdAt      DateTime     @default(now())
+  deletedAt      DateTime?
+
+  @@index([conversationId, createdAt])
+}
+
+// ===========================================================================
+// Notificações (amizade, mensagens, planos, sistema)
+// ===========================================================================
+enum NotificationType {
+  FRIEND_REQUEST
+  FRIEND_ACCEPTED
+  MESSAGE
+  PLAN_SHARED
+  SYSTEM
+}
+
+model Notification {
+  id        String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String           @db.ObjectId
+  user      User             @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  actorId   String?          @db.ObjectId
+  actor     User?            @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  payload   String?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+}
+
+// ===========================================================================
+// Outbox transacional de eventos de domínio
+// ===========================================================================
+// Desacopla efeitos colaterais (notificações, fan-out em tempo real) do request:
+// a ação grava um evento aqui e um processador o entrega depois (via after() no
+// mesmo request e/ou pelo cron de retentativa). Entrega ao-menos-uma-vez com
+// backoff; os handlers são idempotentes o suficiente para tolerar reentrega.
+enum OutboxStatus {
+  PENDING
+  PROCESSED
+  FAILED
+}
+
+model OutboxEvent {
+  id            String       @id @default(auto()) @map("_id") @db.ObjectId
+  type          String
+  payload       String // JSON serializado do evento de domínio
+  status        OutboxStatus @default(PENDING)
+  attempts      Int          @default(0)
+  lastError     String?
+  nextAttemptAt DateTime     @default(now())
+  createdAt     DateTime     @default(now())
+  processedAt   DateTime?
+
+  // Varredura do processador: pendentes já "vencidos", em ordem de chegada.
+  @@index([status, nextAttemptAt])
+  // Expurgo de eventos já processados por idade.
+  @@index([status, processedAt])
+}
+
+// ===========================================================================
+// Conteúdo global e imutável servido do banco (Bíblia e hinário)
+// ===========================================================================
+// Migração dos JSON lidos do filesystem em runtime para o Mongo. Ativado por
+// CONTENT_SOURCE=mongo (com fallback ao fs); populado pelo seed interno. Um
+// documento por capítulo mantém as leituras pequenas (só o capítulo pedido).
+model BibleChapter {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  version   String
+  bookIndex Int
+  chapter   Int
+  verses    String[]
+
+  @@unique([version, bookIndex, chapter])
+  @@index([version])
+}
+
+model Hino {
+  id       String   @id @default(auto()) @map("_id") @db.ObjectId
+  numero   Int      @unique
+  titulo   String
+  coro     String?
+  estrofes String[]
+}
