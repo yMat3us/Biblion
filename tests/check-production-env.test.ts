@@ -10,8 +10,8 @@ const validProductionEnv: NodeJS.ProcessEnv = {
   AI_PROVIDER: 'gemini',
   GOOGLE_GENERATIVE_AI_API_KEY: 'ci-placeholder',
   UPSTASH_REDIS_REST_URL: 'https://redis.example.invalid',
-  UPSTASH_REDIS_REST_TOKEN: 'ci-placeholder',
-  CRON_SECRET: '0123456789abcdef0123456789abcdef',
+  UPSTASH_REDIS_REST_TOKEN: 'ci-placeholder', // gitleaks:allow
+  CRON_SECRET: '0123456789abcdef0123456789abcdef', // gitleaks:allow
 }
 
 /** Clona a base de produção removendo as chaves indicadas (sem variáveis órfãs). */
@@ -21,8 +21,8 @@ function envWithout(...keys: string[]): NodeJS.ProcessEnv {
   return clone
 }
 
-function envWith(values: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  return { ...validProductionEnv, ...values }
+function envWith(values: Partial<NodeJS.ProcessEnv>): NodeJS.ProcessEnv {
+  return { ...validProductionEnv, ...values } as NodeJS.ProcessEnv
 }
 
 describe('validateProductionEnv — contrato de produção', () => {
@@ -92,11 +92,11 @@ describe('validateProductionEnv — contrato de produção', () => {
   })
 
   describe('object storage', () => {
-    const completeStorage: NodeJS.ProcessEnv = {
+    const completeStorage: Partial<NodeJS.ProcessEnv> = {
       STORAGE_ENDPOINT: 'https://storage.example.invalid',
       STORAGE_BUCKET: 'biblion-assets',
-      STORAGE_ACCESS_KEY_ID: 'storage-access-key',
-      STORAGE_SECRET_ACCESS_KEY: 'storage-secret-key',
+      STORAGE_ACCESS_KEY_ID: 'storage-access-key', // gitleaks:allow
+      STORAGE_SECRET_ACCESS_KEY: 'storage-secret-key', // gitleaks:allow
       STORAGE_PUBLIC_BASE_URL: 'https://cdn.example.invalid/biblion',
     }
 
