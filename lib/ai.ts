@@ -327,6 +327,7 @@ Regras inegociáveis:
 - A reflexão deve ter profundidade pastoral e teológica.
 - Inclua sempre: uma pergunta pessoal, uma ação prática concreta e uma oração guiada curta.
 - ATENÇÃO: Você está gerando o LOTE do DIA ${startDay} até o DIA ${endDay}. Gere exatamente ${currentBatchSize} dias.
+${dias > 25 ? '- REGRA ESTRITA: O plano é grande, portanto NÃO escreva "Dia X" nem numere os títulos de cada dia, forneça apenas o título temático. Também NÃO informe nem mencione a quantidade de dias no Título Geral ou na Descrição Geral do plano (nada de "Plano de X dias...").' : ''}
 <dados>${promptData(tema, 300)}</dados>`,
     }))
     
@@ -348,9 +349,9 @@ Regras inegociáveis:
   }
 
   // Cota do Gemini 3.5 Flash Lite: 15 RPM
-  // Concorrência de 3 com delay de 8s = 15 requests em 40 segundos.
-  // Isso impede que o servidor Nginx/Cloudflare corte a conexão por dar 60s de timeout!
-  const concurrency = 3
+  // Concorrência de 5 com delay de 2s = 3 iterações (totalizando ~25 segundos).
+  // Fica muito abaixo do timeout de 60s dos navegadores/servidores.
+  const concurrency = 5
   const successfulResults: { object: PlanBatch; startDay: number }[] = []
   
   for (let i = 0; i < chunkTasks.length; i += concurrency) {
@@ -366,7 +367,7 @@ Regras inegociáveis:
     }
 
     if (i + concurrency < chunkTasks.length) {
-      await new Promise(resolve => setTimeout(resolve, 8000))
+      await new Promise(resolve => setTimeout(resolve, 2000))
     }
   }
 

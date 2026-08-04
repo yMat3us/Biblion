@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Globe, Lock, PlusCircle, Save, Sparkles, Trash2, Wand2 } from 'lucide-react'
 import { DetailHeader, SectionHeading, WorkspacePage } from '@/components/layout/WorkspacePage'
@@ -143,6 +143,31 @@ function FormularioIA({ router, toast }: FormProps) {
     }
   }
 
+  const [loadingMsgIdx, setLoadingMsgIdx] = useState(0)
+  
+  const mensagensCarregamento = [
+    'Iniciando Inteligência Artificial...',
+    'Buscando referências bíblicas...',
+    'Lendo o contexto histórico...',
+    'Escrevendo reflexões pastorais...',
+    'Gerando perguntas e ações...',
+    'Revisando teologia do plano...',
+    'Finalizando os dias...'
+  ]
+
+  // Effect para rotacionar as mensagens enquanto gera
+  useEffect(() => {
+    let interval: NodeJS.Timeout
+    if (gerando) {
+      interval = setInterval(() => {
+        setLoadingMsgIdx((i) => (i < mensagensCarregamento.length - 1 ? i + 1 : i))
+      }, 4500)
+    } else {
+      setLoadingMsgIdx(0)
+    }
+    return () => clearInterval(interval)
+  }, [gerando])
+
   return (
     <div className="surface space-y-5 p-5 sm:p-6">
       <Input
@@ -180,8 +205,8 @@ function FormularioIA({ router, toast }: FormProps) {
         <Sparkles size={16} className="shrink-0 text-primary" />
         A IA sugere referências bíblicas para você abrir e ler na própria Bíblia. Sempre confira as passagens. Planos grandes ({'>'} 60 dias) dependem de aprovação.
       </div>
-      <Button onClick={gerar} loading={gerando} disabled={disabled} className="w-full sm:w-auto">
-        <Wand2 size={16} /> Gerar plano
+      <Button onClick={gerar} loading={gerando} disabled={disabled} className="w-full sm:w-auto transition-all duration-300">
+        {gerando ? <span className="animate-pulse">{mensagensCarregamento[loadingMsgIdx]}</span> : <><Wand2 size={16} /> Gerar plano</>}
       </Button>
     </div>
   )
