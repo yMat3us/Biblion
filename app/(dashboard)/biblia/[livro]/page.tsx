@@ -263,8 +263,12 @@ export default function LivroPage() {
   }
 
   const fetchBookInsights = async () => {
-    if (aiBookInsights) return
+    if (aiBookInsights) {
+      setIsolatedAnalysis('livro')
+      return
+    }
     setAiBookLoading(true)
+    setIsolatedAnalysis('livro')
     try {
       const response = await fetch('/api/ai/bible-book', {
         method: 'POST',
@@ -275,6 +279,8 @@ export default function LivroPage() {
       setAiBookInsights(await response.json() as BookInsights)
     } catch {
       toast.error('Não foi possível gerar o estudo do livro.')
+      setIsolatedAnalysis(null)
+    } finally {
       setAiBookLoading(false)
     }
   }
@@ -418,8 +424,8 @@ export default function LivroPage() {
 
   if (isReadingMode) {
     return (
-      <div className="min-h-[100dvh] bg-background text-foreground selection:bg-scripture-soft selection:text-scripture">
-        <div className="fixed top-0 inset-x-0 z-30 flex items-center justify-between p-4 bg-gradient-to-b from-background to-transparent pointer-events-none">
+      <div className="fixed inset-0 z-[100] overflow-y-auto bg-background text-foreground selection:bg-scripture-soft selection:text-scripture">
+        <div className="fixed top-0 inset-x-0 z-[101] flex items-center justify-between p-4 bg-gradient-to-b from-background to-transparent pointer-events-none">
           <Button type="button" variant="ghost" size="sm" onClick={() => setIsReadingMode(false)} className="pointer-events-auto bg-background/50 backdrop-blur-md border border-hairline">
             <ChevronLeft size={16} /> Sair do modo de leitura
           </Button>
@@ -458,21 +464,21 @@ export default function LivroPage() {
         icon={BookOpen}
         meta={<><Badge variant={isOldTestament ? 'warning' : 'default'}>{isOldTestament ? 'Antiga Aliança' : 'Nova Aliança'}</Badge><Badge variant="outline">Capítulo {capitulo}</Badge></>}
         actions={
-          <div className="flex w-full sm:w-auto items-center gap-2">
-            <Button type="button" variant="outline" className="w-full sm:w-auto text-scripture border-scripture/20 hover:border-scripture/50" onClick={() => setIsReadingMode(true)}>
+          <div className="flex w-full items-center justify-between gap-2 sm:w-auto">
+            <Button type="button" variant="outline" className="flex-1 sm:flex-none text-scripture border-scripture/20 hover:border-scripture/50" onClick={() => setIsReadingMode(true)}>
               Modo Leitura
             </Button>
-            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setIsVersionModalOpen(true)}>
-              <Languages size={14} className="mr-2 opacity-50" />
-              {version}
-              <ChevronDown size={14} className="ml-2 opacity-50" />
+            <Button type="button" variant="outline" className="flex-1 sm:flex-none" onClick={() => setIsVersionModalOpen(true)}>
+              <Languages size={14} className="mr-2 opacity-50 shrink-0" />
+              <span className="truncate">{version}</span>
+              <ChevronDown size={14} className="ml-2 opacity-50 shrink-0" />
             </Button>
           </div>
         }
       />
       
       <Modal isOpen={isVersionModalOpen} onClose={() => setIsVersionModalOpen(false)} title="Tradução da Bíblia" description="Escolha a versão que você prefere para sua leitura.">
-        <div className="grid gap-2">
+        <div className="grid gap-2 max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar">
           {BIBLE_VERSIONS.map(([key, name]) => (
             <button
               key={key}
@@ -569,22 +575,21 @@ export default function LivroPage() {
                 <div className="space-y-1">
                   {filteredVerses.map((verse) => {
                     return (
-                      <div key={verse.verse}>
-                        <button
+                      <div key={verse.verse} className="group flex items-start gap-2 rounded-xl px-3 py-2 transition-colors sm:px-4 sm:py-3 hover:bg-elevated/45">
+                        <div className="reading flex-1 pt-1">
+                          <span className="verse-number">{verse.verse}</span>
+                          <span className="text-foreground/85 group-hover:text-foreground transition-colors">{verse.text}</span>
+                        </div>
+                        <Button
                           type="button"
+                          variant="ghost"
+                          size="icon"
                           onClick={() => fetchInsights(verse.verse, verse.text)}
-                          className={cn(
-                            'group w-full rounded-xl px-3 py-2 text-left transition-colors sm:px-4 sm:py-3 hover:bg-elevated/45',
-                          )}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 bg-scripture-soft text-scripture hover:bg-scripture/20 hover:text-scripture h-8 w-8"
+                          aria-label="Gerar análise do versículo"
                         >
-                          <span className="reading relative pr-8 block">
-                            <span className="verse-number">{verse.verse}</span>
-                            <span className="text-foreground/85 group-hover:text-foreground transition-colors">{verse.text}</span>
-                            <span className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-scripture-soft text-scripture rounded-full p-1.5 shadow-sm">
-                              <Sparkles size={14} />
-                            </span>
-                          </span>
-                        </button>
+                          <Sparkles size={14} />
+                        </Button>
                       </div>
                     )
                   })}

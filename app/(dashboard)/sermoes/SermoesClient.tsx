@@ -176,11 +176,11 @@ export function SermoesClient({ sermoes, initialCursor }: { sermoes: Sermao[]; i
         </section>
       )}
 
-      <section className="manuscript-toolbar mb-8" aria-label="Busca e filtros de sermões">
-        <div className="flex flex-col items-center gap-4">
+      <section className="manuscript-toolbar mb-8 w-full" aria-label="Busca e filtros de sermões">
+        <div className="flex flex-col items-center gap-4 w-full">
           
           {/* Busca (Centralizada e Grande) */}
-          <div className="group relative w-full max-w-2xl">
+          <div className="group relative w-full">
             <label htmlFor="sermon-search" className="sr-only">Buscar por título, tema ou texto base</label>
             <Search aria-hidden="true" className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-subtle transition-colors group-focus-within:text-primary" />
             <input
@@ -194,13 +194,13 @@ export function SermoesClient({ sermoes, initialCursor }: { sermoes: Sermao[]; i
           </div>
 
           {/* Filtros (Centralizados Abaixo) */}
-          <div className="flex flex-wrap items-center justify-center gap-3">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 w-full">
             
             {/* Categoria Modal Trigger */}
             <button
               type="button"
               onClick={() => setCategoryModalOpen(true)}
-              className="inline-flex h-10 items-center justify-between gap-2 rounded-xl border border-hairline bg-surface px-4 text-sm font-medium text-foreground shadow-sm transition-colors hover:border-hairline-strong hover:bg-elevated focus:outline-none focus:ring-2 focus:ring-primary/20 sm:min-w-44"
+              className="inline-flex h-12 w-full sm:w-auto items-center justify-between gap-2 rounded-xl border border-hairline bg-surface px-4 text-sm font-medium text-foreground shadow-sm transition-colors hover:border-hairline-strong hover:bg-elevated focus:outline-none focus:ring-2 focus:ring-primary/20 sm:min-w-44"
             >
               <span>{categoriaFilter === 'all' ? 'Todas as categorias' : categoriaFilter}</span>
               <ChevronDown size={16} className="text-muted-foreground" />
@@ -238,7 +238,7 @@ export function SermoesClient({ sermoes, initialCursor }: { sermoes: Sermao[]; i
             </Modal>
 
             {/* Filtros de Status */}
-            <div className="flex rounded-xl border border-hairline bg-elevated/70 p-1" aria-label="Filtrar por status">
+            <div className="flex w-full sm:w-auto rounded-xl border border-hairline bg-elevated/70 p-1" aria-label="Filtrar por status">
               {(['all', 'published', 'draft'] as const).map((status) => {
                 const label = status === 'all' ? 'Todos' : status === 'published' ? 'Publicados' : 'Rascunhos'
                 return (
@@ -248,7 +248,7 @@ export function SermoesClient({ sermoes, initialCursor }: { sermoes: Sermao[]; i
                     aria-pressed={statusFilter === status}
                     onClick={() => setStatusFilter(status)}
                     className={cn(
-                      'flex-1 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-all',
+                      'flex-1 whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-medium transition-all',
                       statusFilter === status ? 'bg-surface text-foreground shadow-soft' : 'text-subtle hover:text-foreground',
                     )}
                   >

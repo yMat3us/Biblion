@@ -15,17 +15,14 @@ const MAX_PDF_IMAGE_PIXELS = 25_000_000
 async function extractPdfText(buffer: Buffer): Promise<string> {
   const parser = new PDFParse({
     data: buffer,
-    isEvalSupported: false,
-    maxImageSize: MAX_PDF_IMAGE_PIXELS,
-    stopAtErrors: true,
-    useSystemFonts: false,
   })
 
   try {
     const result = await parser.getText()
     return result.text.trim()
-  } catch {
-    throw ApiErrors.badRequest('PDF inválido ou não suportado')
+  } catch (error) {
+    console.error('[PDF Extraction Error]', error)
+    throw ApiErrors.badRequest('PDF inválido ou não suportado: ' + (error instanceof Error ? error.message : 'Falha na leitura'))
   } finally {
     await parser.destroy().catch(() => undefined)
   }

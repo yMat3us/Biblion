@@ -139,8 +139,8 @@ export async function generateBibleInsights(verseRef: string, verseText: string)
       hermeneutica: z.string(),
       aplicacao: z.string(),
       homiletica: z.string(),
-      versiculosRelacionados: z.array(z.string()).max(10),
-      comparacaoVersoes: z.array(z.object({ versao: z.string(), texto: z.string() })).max(5),
+      versiculosRelacionados: z.array(z.string()),
+      comparacaoVersoes: z.array(z.object({ versao: z.string(), texto: z.string() })),
     }),
     prompt: `Analise o versículo com rigor teológico. ${UNTRUSTED_DATA_RULE}
 Se não tiver segurança sobre uma tradução literal, informe a limitação em vez de fabricar o texto. Diferencie interpretação de fato histórico.
@@ -281,7 +281,10 @@ Se não for apropriado, defina isAppropriate como false e explique o motivo de f
 export async function generateReadingPlan({ tema, dias }: { tema: string; dias: number }) {
   // Para planos muito longos, vamos particionar a requisição em lotes (ex: 10 dias por vez).
   // Isso evita o erro de timeout de 60s da Vercel.
-  const batchSize = 10
+  let batchSize = 10
+  if (dias > 180) batchSize = 45
+  else if (dias > 60) batchSize = 20
+
   const batches = Math.ceil(dias / batchSize)
   
   let tituloGeral = ''
@@ -289,10 +292,7 @@ export async function generateReadingPlan({ tema, dias }: { tema: string; dias: 
   let categoriaGeral = ''
   const todosDias: { titulo: string | null; referencia: string; reflexao: string; pergunta: string | null; acao: string | null; oracao: string | null }[] = []
 
-  // Geramos os lotes em sequência ou paralelo.
-  // Em Vercel hobby (60s), se rodarmos tudo em paralelo, corremos risco de rate limit e timeouts globais,
-  // mas rodar em paralelo economiza o tempo global da requisição. Vamos rodar batches em paralelo com Promise.all.
-  const chunkPromises = Array.from({ length: batches }).map(async (_, index) => {
+  const chunkTasks = Array.from({ length: batches }).map((_, index) => async () => {
     const startDay = index * batchSize + 1
     const currentBatchSize = Math.min(batchSize, dias - startDay + 1)
     const endDay = startDay + currentBatchSize - 1
@@ -327,11 +327,27 @@ Regras inegociáveis:
     return { object, startDay }
   })
 
-  const results = await Promise.all(chunkPromises)
-  // Ordena os lotes pelo startDay para garantir a ordem correta caso Promise.all retorne fora de ordem (não deveria, mas garante)
-  results.sort((a, b) => a.startDay - b.startDay)
+  // Executa com limite de concorrência para respeitar rate limits (ex: Gemini Free = 5 RPM/concurrent)
+  const concurrency = 4
+  const successfulResults: { object: any; startDay: number }[] = []
+  
+  for (let i = 0; i < chunkTasks.length; i += concurrency) {
+    const batch = chunkTasks.slice(i, i + concurrency).map(task => task())
+    const results = await Promise.allSettled(batch)
+    
+    for (const res of results) {
+      if (res.status === 'fulfilled') {
+        successfulResults.push(res.value)
+      } else {
+        console.error('[AI Plan Generation Error]', res.reason)
+      }
+    }
+  }
 
-  results.forEach(({ object }, index) => {
+  // Ordena os lotes pelo startDay para garantir a ordem correta
+  successfulResults.sort((a, b) => a.startDay - b.startDay)
+
+  successfulResults.forEach(({ object }, index) => {
     if (index === 0) {
       tituloGeral = object.titulo
       descricaoGeral = object.descricao
