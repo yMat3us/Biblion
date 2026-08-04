@@ -1,21 +1,24 @@
 import { generateObject, generateText } from 'ai'
 import { openai } from '@ai-sdk/openai'
 import { google } from '@ai-sdk/google'
+import { deepseek } from '@ai-sdk/deepseek'
 import { z } from 'zod'
 import { ApiErrors } from '@/lib/http'
 import { logAiUsage, startTimer, type RawUsage } from '@/lib/observability'
 
-type ModelProvider = 'openai' | 'gemini'
+type ModelProvider = 'openai' | 'gemini' | 'deepseek'
 
 function configuredProvider(requested?: string): ModelProvider {
   const preferred = requested ?? process.env.AI_PROVIDER
-  if (preferred === 'openai' || preferred === 'gemini') return preferred
+  if (preferred === 'openai' || preferred === 'gemini' || preferred === 'deepseek') return preferred
   if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) return 'gemini'
+  if (process.env.DEEPSEEK_API_KEY) return 'deepseek'
   if (process.env.OPENAI_API_KEY) return 'openai'
   throw ApiErrors.serviceUnavailable('Nenhum provedor de IA está configurado')
 }
 
 function modelId(provider: ModelProvider): string {
+  if (provider === 'deepseek') return process.env.DEEPSEEK_MODEL || 'deepseek-chat'
   return provider === 'openai'
     ? process.env.OPENAI_MODEL || 'gpt-4o'
     : process.env.GOOGLE_AI_MODEL || 'gemini-2.5-flash'
@@ -29,6 +32,10 @@ export function currentModelInfo(requested?: string): { provider: ModelProvider;
 
 export function getModel(modelType?: string) {
   const provider = configuredProvider(modelType)
+  if (provider === 'deepseek') {
+    if (!process.env.DEEPSEEK_API_KEY) throw ApiErrors.serviceUnavailable('DeepSeek não está configurado')
+    return deepseek(modelId('deepseek'))
+  }
   if (provider === 'openai') {
     if (!process.env.OPENAI_API_KEY) throw ApiErrors.serviceUnavailable('OpenAI não está configurada')
     return openai(modelId('openai'))
@@ -265,7 +272,7 @@ Retorne três referências relevantes, conceitos e uma sugestão de sermão. Nã
 
 export async function moderatePlanTopic(tema: string) {
   const { object } = await measured('plan-moderation', () => generateObject({
-    model: getModel('openai'),
+    model: getModel('deepseek'),
     maxOutputTokens: 1000,
     schema: z.object({
       isAppropriate: z.boolean(),
@@ -298,7 +305,7 @@ export async function generateReadingPlan({ tema, dias }: { tema: string; dias: 
     const endDay = startDay + currentBatchSize - 1
 
     const { object } = await measured(`reading-plan-batch-${index}`, () => generateObject({
-      model: getModel('openai'),
+      model: getModel('deepseek'),
       maxOutputTokens: 8_000,
       schema: z.object({
         titulo: z.string(),
