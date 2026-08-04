@@ -17,14 +17,14 @@ function configuredServerUrl(): URL | undefined {
   }
 
   if (
-    url.protocol !== 'https:' ||
+    (url.protocol !== 'https:' && url.protocol !== 'http:') ||
     url.username ||
     url.password ||
     url.pathname !== '/' ||
     url.search ||
     url.hash
   ) {
-    throw new Error('CAPACITOR_SERVER_URL deve ser uma origem HTTPS sem credenciais, caminho, query ou fragmento.')
+    throw new Error('CAPACITOR_SERVER_URL deve ser uma origem HTTP ou HTTPS sem credenciais, caminho, query ou fragmento.')
   }
   return url
 }
@@ -38,8 +38,8 @@ const config: CapacitorConfig = {
     ? {
         server: {
           url: serverUrl.origin,
-          cleartext: false,
-          androidScheme: 'https',
+          cleartext: serverUrl.protocol === 'http:',
+          androidScheme: serverUrl.protocol === 'http:' ? 'http' : 'https',
           allowNavigation: [serverUrl.hostname],
         },
       }

@@ -52,12 +52,31 @@ function trustedOrigins(req: NextRequest) {
 
 function assertTrustedOrigin(req: NextRequest): void {
   if (SAFE_METHODS.has(req.method)) return
-  if (req.headers.get('sec-fetch-site') === 'cross-site') {
-    throw ApiErrors.forbidden('Origem da requisição não permitida')
+
+  const rawOrigin = req.headers.get('origin')
+  let normalizedOrigin: string | null = null
+
+  if (rawOrigin) {
+    try {
+      normalizedOrigin = new URL(rawOrigin).origin
+    } catch {
+      normalizedOrigin = rawOrigin
+    }
   }
-  const origin = req.headers.get('origin')
-  if (origin && !trustedOrigins(req).has(origin)) {
-    throw ApiErrors.forbidden('Origem da requisição não permitida')
+
+  const isCrossSite = req.headers.get('sec-fetch-site') === 'cross-site'
+  const trusted = trustedOrigins(req)
+
+  if (normalizedOrigin) {
+    if (!trusted.has(normalizedOrigin)) {
+      throw ApiErrors.forbidden(`Origem da requisição não permitida: ${normalizedOrigin}`)
+    }
+    // If the origin is explicitly trusted, we allow it even if it's cross-site.
+    return
+  }
+
+  if (isCrossSite) {
+    throw ApiErrors.forbidden('Origem da requisição não permitida (cross-site sem origem)')
   }
 }
 
