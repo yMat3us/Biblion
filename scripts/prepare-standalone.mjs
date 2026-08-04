@@ -199,6 +199,13 @@ export async function prepareStandalone({ projectRoot = process.cwd() } = {}) {
     // e torna execuções repetidas determinísticas.
     await promoteDirectory(stagedPublic, paths.publicDestination)
     await promoteDirectory(stagedStatic, paths.staticDestination)
+    
+    // Fallback para bug do Turbopack: copia o middleware-manifest se ele não foi copiado
+    try {
+      await cp(join(paths.nextDirectory, 'server', 'middleware-manifest.json'), join(paths.standaloneNextDirectory, 'server', 'middleware-manifest.json'), { force: true })
+    } catch (e) {
+      // ignora se não existir
+    }
 
     await verifyStandalone({ projectRoot: paths.root })
 
