@@ -341,8 +341,9 @@ Regras inegociáveis:
     }[]
   }
 
-  // Reduzido para 2 para ser extremamente conservador com o rate limit do Gemini Free (15-20 RPM)
-  const concurrency = 2
+  // Reduzido para 1 e delay para 15s para NUNCA ultrapassar 4 requisições por minuto.
+  // Isso resolve definitivamente o "Quota exceeded for metric: generativelanguage... free_tier"
+  const concurrency = 1
   const successfulResults: { object: PlanBatch; startDay: number }[] = []
   
   for (let i = 0; i < chunkTasks.length; i += concurrency) {
@@ -357,10 +358,9 @@ Regras inegociáveis:
       }
     }
 
-    // Se ainda houver mais lotes para processar, aguarda 8 segundos antes de disparar a próxima leva.
-    // Isso espalha as requisições ao longo de 1 minuto, impedindo o erro 429 Quota Exceeded.
     if (i + concurrency < chunkTasks.length) {
-      await new Promise(resolve => setTimeout(resolve, 8000))
+      // 15 segundos entre requests garante apenas 4 reqs/minuto (muito abaixo do limite de 15 do Google)
+      await new Promise(resolve => setTimeout(resolve, 15000))
     }
   }
 
