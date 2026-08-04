@@ -13,6 +13,10 @@ export const maxDuration = 300
 const HEARTBEAT_MS = 25_000
 
 export const GET = route(async (req: NextRequest, _ctx, user) => {
+  if (!user) {
+    console.error('[STREAM ERROR] user is null!', { user, _ctx })
+    return new Response('Unauthorized', { status: 401 })
+  }
   const channel = `user:${user.id}`
   const encoder = new TextEncoder()
   let heartbeat: ReturnType<typeof setInterval> | undefined
