@@ -34,7 +34,7 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   poweredByHeader: false,
   productionBrowserSourceMaps: false,
-  serverExternalPackages: ['@prisma/client', 'prisma', 'pdf-parse'],
+  serverExternalPackages: ['@prisma/client', 'prisma', 'pdf-parse', 'zod'],
   // Habilita as APIs experimentais de taint do React: marca objetos/valores
   // sensíveis (segredos de ambiente) como não-serializáveis ao client. É defesa
   // em profundidade — a proteção primária continua sendo selects/DTOs mínimos.
