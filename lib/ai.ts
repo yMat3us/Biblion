@@ -327,9 +327,23 @@ Regras inegociáveis:
     return { object, startDay }
   })
 
+  type PlanBatch = {
+    titulo: string
+    descricao: string
+    categoria: string
+    dias: {
+      titulo: string
+      referencia: string
+      reflexao: string
+      pergunta: string
+      acao: string
+      oracao: string
+    }[]
+  }
+
   // Executa com limite de concorrência para respeitar rate limits (ex: Gemini Free = 5 RPM/concurrent)
   const concurrency = 4
-  const successfulResults: { object: any; startDay: number }[] = []
+  const successfulResults: { object: PlanBatch; startDay: number }[] = []
   
   for (let i = 0; i < chunkTasks.length; i += concurrency) {
     const batch = chunkTasks.slice(i, i + concurrency).map(task => task())

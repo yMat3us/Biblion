@@ -10,7 +10,6 @@ export const runtime = 'nodejs'
 
 const MAX_PDF_BYTES = 15 * 1024 * 1024
 const MAX_EXTRACTED_TEXT_CHARS = 1_000_000
-const MAX_PDF_IMAGE_PIXELS = 25_000_000
 
 async function extractPdfText(buffer: Buffer): Promise<string> {
   const parser = new PDFParse({
