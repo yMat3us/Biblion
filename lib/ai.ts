@@ -285,7 +285,7 @@ Se não for apropriado, defina isAppropriate como false e explique o motivo de f
   return object
 }
 
-export async function generateReadingPlan({ tema, dias }: { tema: string; dias: number }) {
+export async function generateReadingPlan({ tema, dias, onBatchGenerated }: { tema: string; dias: number, onBatchGenerated?: (batch: { titulo: string; referencia: string; reflexao: string; pergunta: string | null; acao: string | null; oracao: string | null; dia: number }[]) => Promise<void> }) {
   // Para planos muito longos, vamos particionar a requisição em lotes (ex: 10 dias por vez).
   // Isso evita o erro de timeout de 60s da Vercel.
   let batchSize = 15
@@ -361,6 +361,13 @@ ${dias > 25 ? '- REGRA ESTRITA: O plano é grande, portanto NÃO escreva "Dia X"
     for (const res of results) {
       if (res.status === 'fulfilled') {
         successfulResults.push(res.value)
+        if (onBatchGenerated) {
+          const batchWithDays = res.value.object.dias.map((dia, i) => ({
+            ...dia,
+            dia: res.value.startDay + i
+          }))
+          onBatchGenerated(batchWithDays).catch(console.error)
+        }
       } else {
         console.error('[AI Plan Generation Error]', res.reason)
       }

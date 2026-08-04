@@ -56,7 +56,28 @@ export function PlanoDetailClient({ plano }: { plano: PlanoDetail }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<{ id: string; username: string; displayName?: string | null; avatarUrl?: string | null }[]>([])
   const [searching, setSearching] = useState(false)
+  const [dias, setDias] = useState(plano.dias)
   const [invitingId, setInvitingId] = useState<string | null>(null)
+  
+  const isGenerating = dias.length < plano.duracaoDias
+
+  useEffect(() => {
+    if (!isGenerating) return
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/planos/${plano.id}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.dias && data.dias.length > dias.length) {
+            setDias(data.dias)
+          }
+        }
+      } catch (err) {
+        console.error('Falha no polling', err)
+      }
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [isGenerating, plano.id, dias.length])
 
   useEffect(() => {
     if (!searchQuery.trim() || !inviteModalOpen) {
@@ -224,12 +245,12 @@ export function PlanoDetailClient({ plano }: { plano: PlanoDetail }) {
   }
 
   const proximoDia = useMemo(() => {
-    const pendente = plano.dias.find((dia) => !concluidos.has(dia.dia))
-    return pendente?.dia ?? plano.dias.at(-1)?.dia ?? 1
-  }, [plano.dias, concluidos])
+    const pendente = dias.find((dia) => !concluidos.has(dia.dia))
+    return pendente?.dia ?? dias.at(-1)?.dia ?? 1
+  }, [dias, concluidos])
 
   if (leituraIsolada !== null) {
-    const dia = plano.dias.find(d => d.dia === leituraIsolada)
+    const dia = dias.find(d => d.dia === leituraIsolada)
     if (!dia) {
       setLeituraIsolada(null)
       return null
@@ -427,8 +448,8 @@ export function PlanoDetailClient({ plano }: { plano: PlanoDetail }) {
       </div>
 
       {/* Dias */}
-      <ol className="space-y-3">
-        {plano.dias.map((dia) => {
+      <ol className="grid grid-cols-1 gap-4">
+        {dias.map((dia) => {
           const feito = concluidos.has(dia.dia)
           const expandido = aberto === dia.dia
           return (
@@ -502,6 +523,18 @@ export function PlanoDetailClient({ plano }: { plano: PlanoDetail }) {
           )
         })}
       </ol>
+
+      {isGenerating && (
+        <div className="mt-6 flex flex-col items-center justify-center space-y-3 rounded-2xl border border-dashed border-primary/20 bg-primary-soft/50 py-10 text-center animate-pulse">
+          <Sparkles className="text-primary" size={24} />
+          <div className="space-y-1">
+            <h3 className="text-sm font-medium text-foreground">A inteligência artificial está trabalhando...</h3>
+            <p className="text-xs text-muted-foreground">
+              {dias.length > 0 ? `Escrevendo o dia ${dias.length + 1}...` : 'Preparando o plano...'}
+            </p>
+          </div>
+        </div>
+      )}
 
       <p className="mt-8 text-center text-sm italic leading-relaxed text-muted-foreground">
         Sem pressa. Um dia por vez é suficiente para crescer.
