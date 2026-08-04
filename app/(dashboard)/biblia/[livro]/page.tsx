@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Markdown } from '@/components/ui/Markdown'
 import {
   BookMarked,
@@ -17,10 +16,8 @@ import {
   LibraryBig,
   ListFilter,
   Loader2,
-  Save,
   Search,
   Sparkles,
-  X,
 } from 'lucide-react'
 import { getLivro, LIVROS_BIBLIA } from '@/data/livros'
 import { DetailHeader, SectionHeading, WorkspacePage } from '@/components/layout/WorkspacePage'
@@ -131,20 +128,18 @@ const CHAPTER_INSIGHT_SECTIONS: Array<{ label: string; key: keyof ChapterInsight
 
 export default function LivroPage() {
   const toast = useToast()
-  const reduceMotion = useReducedMotion()
   const params = useParams<{ livro: string }>()
   const livroNome = decodeURIComponent(params.livro)
   const livro = getLivro(livroNome)
   const [capitulo, setCapitulo] = useState(1)
   const [search, setSearch] = useState('')
-  const [selectedVerse, setSelectedVerse] = useState<number | null>(null)
-  const [aiLoading, setAiLoading] = useState<number | null>(null)
+  const [, setSelectedVerse] = useState<number | null>(null)
+  const [, setAiLoading] = useState<number | null>(null)
   const [aiInsights, setAiInsights] = useState<Record<number, VerseInsights>>({})
   const [aiChapterLoading, setAiChapterLoading] = useState(false)
   const [aiChapterInsights, setAiChapterInsights] = useState<ChapterInsights | null>(null)
   const [aiBookLoading, setAiBookLoading] = useState(false)
   const [aiBookInsights, setAiBookInsights] = useState<BookInsights | null>(null)
-  const [savingInsight, setSavingInsight] = useState<number | null>(null)
   const [versesResult, setVersesResult] = useState<VersesResult>({ requestKey: '', verses: [] })
   const [versesErrorKey, setVersesErrorKey] = useState('')
   const [version, setVersion] = useState('NVI')
@@ -280,47 +275,7 @@ export default function LivroPage() {
       setAiBookInsights(await response.json() as BookInsights)
     } catch {
       toast.error('Não foi possível gerar o estudo do livro.')
-    } finally {
       setAiBookLoading(false)
-      if (!aiBookInsights) setIsolatedAnalysis('livro')
-    }
-  }
-
-  // Hooking the state so it opens when ready if it was triggered
-  useEffect(() => {
-    if (aiChapterInsights) setIsolatedAnalysis('capitulo')
-  }, [aiChapterInsights])
-
-  useEffect(() => {
-    if (aiBookInsights) setIsolatedAnalysis('livro')
-  }, [aiBookInsights])
-
-  const saveInsight = async (verse: number, text: string) => {
-    const insight = aiInsights[verse]
-    if (!insight) return
-    setSavingInsight(verse)
-    try {
-      const conteudo = `# Análise de ${livro?.nome} ${capitulo}:${verse}\n\n> ${text}\n\n## Exegese\n${insight.exegese}\n\n## Hermenêutica\n${insight.hermeneutica}\n\n## Aplicação\n${insight.aplicacao}`
-      const response = await fetch('/api/anotacoes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          titulo: `Análise: ${livro?.nome} ${capitulo}:${verse}`,
-          conteudo,
-          livro: livro?.nome,
-          capitulo,
-          versiculo: verse,
-          referencia: `${livro?.nome} ${capitulo}:${verse}`,
-          tipo: 'estudo',
-          tags: ['ia', 'exegese', livro?.nome],
-        }),
-      })
-      if (!response.ok) throw new Error('save-insight-failed')
-      toast.success('Análise salva nas suas anotações.')
-    } catch {
-      toast.error('Não foi possível salvar a análise.')
-    } finally {
-      setSavingInsight(null)
     }
   }
 
@@ -350,9 +305,9 @@ export default function LivroPage() {
     const isChapter = isolatedAnalysis === 'capitulo'
     const isVerse = typeof isolatedAnalysis === 'number'
 
-    let insights: any = null
+    let insights: VerseInsights | ChapterInsights | BookInsights | null = null
     let title = ''
-    let sections: any[] = []
+    let sections: { label: string; key: keyof VerseInsights | keyof ChapterInsights | keyof BookInsights; wide?: boolean }[] = []
     let eyebrow = ''
 
     if (isBook) {
@@ -399,7 +354,7 @@ export default function LivroPage() {
             <h1 className="text-3xl font-serif font-bold text-foreground sm:text-5xl">{title}</h1>
             {isVerse && verses.find(v => v.verse === isolatedAnalysis) && (
               <p className="mt-4 text-xl font-serif italic text-muted-foreground border-l-4 border-scripture/30 pl-4">
-                "{verses.find(v => v.verse === isolatedAnalysis)?.text}"
+                &quot;{verses.find(v => v.verse === isolatedAnalysis)?.text}&quot;
               </p>
             )}
             <p className="mt-4 text-muted-foreground leading-relaxed max-w-2xl">
@@ -408,8 +363,8 @@ export default function LivroPage() {
           </div>
 
           <div className="grid gap-6 md:grid-cols-2">
-            {sections.map((sec: any, i: number) => {
-              const content = insights[sec.key]
+            {sections.map((sec, i: number) => {
+              const content = (insights as unknown as Record<string, string>)?.[sec.key as string]
               if (!content) return null
               const colorClasses = [
                 'border-blue-500/20 bg-blue-500/5',
@@ -422,35 +377,35 @@ export default function LivroPage() {
               const colorClass = colorClasses[i % colorClasses.length]
               
               return (
-                <div key={sec.key} className={cn("rounded-2xl border p-6 sm:p-8", colorClass, sec.wide ? "md:col-span-2" : "")}>
+                <div key={sec.key as string} className={cn("rounded-2xl border p-6 sm:p-8", colorClass, sec.wide ? "md:col-span-2" : "")}>
                   <h3 className="font-semibold text-foreground mb-4 text-lg border-b border-hairline pb-2">{sec.label}</h3>
                   <div className="prose prose-sm sm:prose-base max-w-none text-muted-foreground prose-strong:text-foreground prose-strong:font-bold prose-headings:text-foreground">
-                    <Markdown>{insights[sec.key] || ''}</Markdown>
+                    <Markdown>{(insights as unknown as Record<string, string>)?.[sec.key as string] || ''}</Markdown>
                   </div>
                 </div>
               )
             })}
           </div>
 
-          {isVerse && insights.versiculosRelacionados?.length > 0 && (
+          {isVerse && (insights as VerseInsights).versiculosRelacionados?.length > 0 && (
             <div className="mt-8 rounded-2xl border border-hairline bg-surface p-6 sm:p-8">
               <h3 className="font-semibold text-foreground mb-4 text-lg border-b border-hairline pb-2">Referências cruzadas</h3>
               <div className="flex flex-wrap gap-2">
-                {insights.versiculosRelacionados.map((ref: string) => <Badge key={ref} variant="warning">{ref}</Badge>)}
+                {(insights as VerseInsights).versiculosRelacionados.map((ref: string) => <Badge key={ref} variant="warning">{ref}</Badge>)}
               </div>
             </div>
           )}
 
-          {isVerse && insights.comparacaoVersoes?.length > 0 && (
+          {isVerse && (insights as VerseInsights).comparacaoVersoes?.length > 0 && (
             <div className="mt-6 rounded-2xl border border-hairline bg-surface p-6 sm:p-8">
               <h3 className="font-semibold text-foreground mb-4 text-lg border-b border-hairline pb-2 flex items-center gap-2">
                 <Languages size={18} /> Comparação de traduções
               </h3>
               <div className="grid gap-4 sm:grid-cols-2">
-                {insights.comparacaoVersoes.map((comp: any) => (
+                {(insights as VerseInsights).comparacaoVersoes.map((comp: { versao: string, texto: string }) => (
                   <div key={comp.versao} className="rounded-xl border border-hairline bg-elevated/40 p-4">
                     <Badge variant="outline" className="mb-2">{comp.versao}</Badge>
-                    <p className="font-serif text-sm italic leading-relaxed text-muted-foreground">"{comp.texto}"</p>
+                    <p className="font-serif text-sm italic leading-relaxed text-muted-foreground">&quot;{comp.texto}&quot;</p>
                   </div>
                 ))}
               </div>
@@ -613,8 +568,6 @@ export default function LivroPage() {
               ) : (
                 <div className="space-y-1">
                   {filteredVerses.map((verse) => {
-                    const selected = selectedVerse === verse.verse
-                    const insight = aiInsights[verse.verse]
                     return (
                       <div key={verse.verse}>
                         <button
@@ -734,14 +687,5 @@ function StudyTrigger({
         <span className="mt-4 flex items-center gap-1 text-xs font-medium text-primary">{ready ? 'Estudo disponível abaixo' : loading ? 'Construindo estudo…' : 'Gerar agora'} {!ready && !loading && <ChevronRight size={13} />}</span>
       </span>
     </button>
-  )
-}
-
-function InsightCard({ label, content, scripture = false, className }: { label: string; content: string; scripture?: boolean; className?: string }) {
-  return (
-    <article className={cn('rounded-2xl border p-5', scripture ? 'border-scripture/20 bg-scripture-soft' : 'border-hairline bg-background/30', className)}>
-      <p className={cn('eyebrow', scripture ? 'text-scripture' : 'text-primary-hover')}>{label}</p>
-      <div className="prose mt-3 max-w-none text-sm"><Markdown>{content}</Markdown></div>
-    </article>
   )
 }

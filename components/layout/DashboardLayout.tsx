@@ -186,7 +186,7 @@ export function DashboardLayout({
       window.removeEventListener('touchstart', handleTouchStart)
       window.removeEventListener('touchend', handleTouchEnd)
     }
-  }, [isDesktop, isMobileMenuOpen])
+  }, [isDesktop, isMobileMenuOpen, pathname])
 
   return (
     <>

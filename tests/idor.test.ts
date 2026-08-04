@@ -12,6 +12,7 @@ const prisma = vi.hoisted(() => ({
   anotacao: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
   readingPlan: { findFirst: vi.fn(), update: vi.fn(), delete: vi.fn() },
   planDay: { deleteMany: vi.fn() },
+  planInvitation: { findUnique: vi.fn() },
   favorito: { deleteMany: vi.fn() },
   configuracao: { findUnique: vi.fn(), upsert: vi.fn() },
 }))
@@ -77,7 +78,7 @@ describe('IDOR — Plano de leitura', () => {
     await expect(PlanoService.get(INVASOR, RECURSO_ALHEIO)).rejects.toMatchObject({ status: 404 })
     expect(prisma.readingPlan.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: RECURSO_ALHEIO, OR: [{ ownerId: INVASOR }, { visibility: 'PUBLIC' }, { oficial: true }] },
+        where: { id: RECURSO_ALHEIO, OR: [{ ownerId: INVASOR }, { visibility: 'PUBLIC' }, { oficial: true }, { invitations: { some: { inviteeId: INVASOR } } }] },
       }),
     )
   })

@@ -27,6 +27,9 @@ const prisma = vi.hoisted(() => ({
     upsert: vi.fn(),
     deleteMany: vi.fn(),
   },
+  planInvitation: {
+    findUnique: vi.fn(),
+  },
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma }))
@@ -150,7 +153,7 @@ describe('PlanoService — visibilidade e progresso', () => {
     })
     expect(prisma.readingPlan.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'plano-alheio', OR: [{ ownerId: 'owner-a' }, { visibility: 'PUBLIC' }, { oficial: true }] },
+        where: { id: 'plano-alheio', OR: [{ ownerId: 'owner-a' }, { visibility: 'PUBLIC' }, { oficial: true }, { invitations: { some: { inviteeId: 'owner-a' } } }] },
       }),
     )
   })
