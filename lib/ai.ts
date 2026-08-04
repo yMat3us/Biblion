@@ -288,9 +288,8 @@ Se não for apropriado, defina isAppropriate como false e explique o motivo de f
 export async function generateReadingPlan({ tema, dias }: { tema: string; dias: number }) {
   // Para planos muito longos, vamos particionar a requisição em lotes (ex: 10 dias por vez).
   // Isso evita o erro de timeout de 60s da Vercel.
-  let batchSize = 10
-  if (dias > 180) batchSize = 45
-  else if (dias > 60) batchSize = 20
+  let batchSize = 15
+  if (dias > 60) batchSize = 25
 
   const batches = Math.ceil(dias / batchSize)
   
