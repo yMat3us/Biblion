@@ -157,13 +157,13 @@ export default function TutorPage() {
     clearError()
     userScrolledUpRef.current = false // reset scroll lock on new message
     
-    let base64Files: string[] = []
+    let base64Files: { url: string; mediaType: string }[] = []
     if (selectedFiles?.length) {
       base64Files = await Promise.all(
         Array.from(selectedFiles).map((file) => {
-          return new Promise<string>((resolve, reject) => {
+          return new Promise<{ url: string; mediaType: string }>((resolve, reject) => {
             const reader = new FileReader()
-            reader.onload = () => resolve(reader.result as string)
+            reader.onload = () => resolve({ url: reader.result as string, mediaType: file.type })
             reader.onerror = reject
             reader.readAsDataURL(file)
           })
@@ -175,9 +175,9 @@ export default function TutorPage() {
       sendMessage({
         role: 'user',
         parts: [
-          ...(inputValue.trim() ? [{ type: 'text', text: inputValue.trim() }] : []),
-          ...base64Files.map((url) => ({ type: 'file', url })),
-        ] as any[],
+          ...(inputValue.trim() ? [{ type: 'text' as const, text: inputValue.trim() }] : []),
+          ...base64Files.map(({ url, mediaType }) => ({ type: 'file' as const, url, mediaType })),
+        ],
       })
     } else {
       sendMessage({
