@@ -348,8 +348,9 @@ Regras inegociáveis:
   }
 
   // Cota do Gemini 3.5 Flash Lite: 15 RPM
-  // Concorrência de 2 com delay de 10s = 12 requests por minuto (perfeitamente seguro)
-  const concurrency = 2
+  // Concorrência de 3 com delay de 8s = 15 requests em 40 segundos.
+  // Isso impede que o servidor Nginx/Cloudflare corte a conexão por dar 60s de timeout!
+  const concurrency = 3
   const successfulResults: { object: PlanBatch; startDay: number }[] = []
   
   for (let i = 0; i < chunkTasks.length; i += concurrency) {
@@ -365,7 +366,7 @@ Regras inegociáveis:
     }
 
     if (i + concurrency < chunkTasks.length) {
-      await new Promise(resolve => setTimeout(resolve, 10000))
+      await new Promise(resolve => setTimeout(resolve, 8000))
     }
   }
 
