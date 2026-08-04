@@ -341,8 +341,8 @@ Regras inegociáveis:
     }[]
   }
 
-  // Executa com limite de concorrência para respeitar rate limits (ex: Gemini Free = 5 RPM/concurrent)
-  const concurrency = 4
+  // Reduzido para 2 para ser extremamente conservador com o rate limit do Gemini Free (15-20 RPM)
+  const concurrency = 2
   const successfulResults: { object: PlanBatch; startDay: number }[] = []
   
   for (let i = 0; i < chunkTasks.length; i += concurrency) {
@@ -355,6 +355,12 @@ Regras inegociáveis:
       } else {
         console.error('[AI Plan Generation Error]', res.reason)
       }
+    }
+
+    // Se ainda houver mais lotes para processar, aguarda 8 segundos antes de disparar a próxima leva.
+    // Isso espalha as requisições ao longo de 1 minuto, impedindo o erro 429 Quota Exceeded.
+    if (i + concurrency < chunkTasks.length) {
+      await new Promise(resolve => setTimeout(resolve, 8000))
     }
   }
 
