@@ -232,6 +232,7 @@ export const aiSermonSchema = z.object({
   texto: z.string().trim().min(1, 'Texto base é obrigatório').max(2_000),
   keyword: z.string().trim().max(300).optional().default(''),
   style: z.string().trim().max(100).optional().default('expositiva'),
+  topicosBase: z.string().optional(),
 })
 
 export const aiVerseSchema = z.object({
@@ -362,7 +363,13 @@ export const planoCreateSchema = z.object({
   capaCor: z.string().trim().max(20).nullish(),
   visibility: z.enum(PLAN_VISIBILITY).optional().default('PRIVATE'),
   dias: z.array(planDaySchema).min(1, 'Adicione ao menos um dia').max(400),
-})
+  motivo: z.string().optional(),
+}).refine((data) => {
+  if (data.dias.length > 60 && (!data.motivo || data.motivo.trim().length === 0)) {
+    return false
+  }
+  return true
+}, { message: "Motivo é obrigatório para planos com mais de 60 dias" })
 
 export const planoUpdateSchema = z
   .object({
@@ -391,8 +398,17 @@ export const planoDiaParamsSchema = z.object({
 
 export const aiPlanoSchema = z.object({
   tema: z.string().trim().min(3, 'Descreva o tema do plano').max(300),
-  dias: z.coerce.number().int().min(1).max(30),
+  dias: z.coerce.number().int().min(1).max(365),
   visibility: z.enum(PLAN_VISIBILITY).optional().default('PRIVATE'),
+  motivo: z.string().optional(),
+}).refine((data) => {
+  if (data.dias > 60 && (!data.motivo || data.motivo.trim().length === 0)) {
+    return false
+  }
+  return true
+}, {
+  message: 'Um motivo é obrigatório para planos maiores que 60 dias (sujeito à aprovação do administrador).',
+  path: ['motivo'],
 })
 
 // ---------------------------------------------------------------------------

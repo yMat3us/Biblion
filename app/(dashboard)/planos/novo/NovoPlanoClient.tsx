@@ -109,24 +109,32 @@ type FormProps = { router: ReturnType<typeof useRouter>; toast: ReturnType<typeo
 function FormularioIA({ router, toast }: FormProps) {
   const [tema, setTema] = useState('')
   const [dias, setDias] = useState(7)
+  const [motivo, setMotivo] = useState('')
   const [visibility, setVisibility] = useState<Visibilidade>('PRIVATE')
   const [gerando, setGerando] = useState(false)
 
+  const isLongo = dias > 60
+  const disabled = tema.trim().length < 3 || (isLongo && motivo.trim().length < 5)
+
   async function gerar() {
-    if (gerando || tema.trim().length < 3) return
+    if (gerando || disabled) return
     setGerando(true)
     try {
       const response = await fetch('/api/ai/plano', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tema: tema.trim(), dias, visibility }),
+        body: JSON.stringify({ tema: tema.trim(), dias, visibility, motivo: isLongo ? motivo.trim() : undefined }),
       })
       if (!response.ok) {
         toast.error(await mensagemErro(response, 'Não foi possível gerar o plano.'))
         return
       }
-      const data = (await response.json()) as { planId: string; jaExistia: boolean }
-      toast.success(data.jaExistia ? 'Você já tinha um plano parecido — abrindo ele.' : 'Plano gerado com oração e cuidado.')
+      const data = (await response.json()) as { planId: string; jaExistia: boolean; status?: string }
+      if (data.status === 'PENDING_APPROVAL') {
+        toast.success('Plano enviado para aprovação devido ao longo período.')
+      } else {
+        toast.success(data.jaExistia ? 'Você já tinha um plano parecido — abrindo ele.' : 'Plano gerado com oração e cuidado.')
+      }
       router.push(`/planos/${data.planId}`)
     } catch {
       toast.error('Falha de conexão ao gerar o plano.')
@@ -150,17 +158,29 @@ function FormularioIA({ router, toast }: FormProps) {
           label="Quantos dias?"
           type="number"
           min={1}
-          max={30}
+          max={365}
           value={dias}
-          onChange={(event) => setDias(Math.max(1, Math.min(30, Number(event.target.value) || 1)))}
+          onChange={(event) => setDias(Math.max(1, Math.min(365, Number(event.target.value) || 1)))}
         />
         <VisibilidadeToggle valor={visibility} onChange={setVisibility} />
       </div>
+      
+      {isLongo && (
+        <Textarea 
+          label="Motivo para plano longo (> 60 dias)"
+          placeholder="Por que deseja gerar um plano tão longo? Isso passará por aprovação do administrador."
+          value={motivo}
+          onChange={(e) => setMotivo(e.target.value)}
+          maxLength={1000}
+          className="min-h-20 border-warning"
+        />
+      )}
+
       <div className="flex items-center gap-3 rounded-xl border border-hairline bg-elevated/40 p-3.5 text-xs leading-relaxed text-subtle">
         <Sparkles size={16} className="shrink-0 text-primary" />
-        A IA sugere referências bíblicas para você abrir e ler na própria Bíblia. Sempre confira as passagens.
+        A IA sugere referências bíblicas para você abrir e ler na própria Bíblia. Sempre confira as passagens. Planos grandes ({'>'} 60 dias) dependem de aprovação.
       </div>
-      <Button onClick={gerar} loading={gerando} disabled={tema.trim().length < 3} className="w-full sm:w-auto">
+      <Button onClick={gerar} loading={gerando} disabled={disabled} className="w-full sm:w-auto">
         <Wand2 size={16} /> Gerar plano
       </Button>
     </div>
@@ -174,9 +194,11 @@ function FormularioManual({ router, toast }: FormProps) {
   const [visibility, setVisibility] = useState<Visibilidade>('PRIVATE')
   const [dias, setDias] = useState<DiaRascunho[]>([diaVazio()])
   const [salvando, setSalvando] = useState(false)
+  const [motivo, setMotivo] = useState('')
 
+  const isLongo = dias.length > 60
   const diasValidos = dias.filter((dia) => dia.referencia.trim() && dia.reflexao.trim())
-  const podeSalvar = titulo.trim().length > 0 && diasValidos.length > 0
+  const podeSalvar = titulo.trim().length > 0 && diasValidos.length > 0 && (!isLongo || motivo.trim().length >= 5)
 
   function atualizarDia(index: number, patch: Partial<DiaRascunho>) {
     setDias((atual) => atual.map((dia, i) => (i === index ? { ...dia, ...patch } : dia)))
@@ -194,6 +216,7 @@ function FormularioManual({ router, toast }: FormProps) {
           descricao: descricao.trim() || null,
           categoria: categoria.trim() || null,
           visibility,
+          motivo: isLongo ? motivo.trim() : undefined,
           dias: diasValidos.map((dia, index) => ({
             dia: index + 1,
             titulo: dia.titulo.trim() || null,
@@ -256,9 +279,22 @@ function FormularioManual({ router, toast }: FormProps) {
             </div>
           ))}
         </div>
-        <Button variant="outline" size="sm" className="mt-4" onClick={() => setDias((atual) => [...atual, diaVazio()])}>
+        <Button variant="outline" size="sm" className="mt-4" onClick={() => setDias((atual) => [...atual, diaVazio()])} disabled={dias.length >= 365}>
           <PlusCircle size={15} /> Adicionar dia
         </Button>
+        {dias.length >= 365 && <p className="mt-2 text-xs text-warning">Você atingiu o limite de 365 dias (1 ano).</p>}
+        {isLongo && (
+          <div className="mt-6">
+            <Textarea 
+              label="Motivo para plano longo (> 60 dias)"
+              placeholder="Por que deseja criar um plano tão longo? Isso passará por aprovação do administrador."
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              maxLength={1000}
+              className="min-h-20 border-warning"
+            />
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-end gap-2 border-t border-hairline pt-5">

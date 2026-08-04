@@ -34,6 +34,7 @@ export default async function PlanoPage({ params }: { params: Promise<{ id: stri
         favorito: plano.favorito,
         autor: plano.owner.displayName || plano.owner.username,
         matricula: plano.matricula,
+        convite: plano.convite,
         diasConcluidos: plano.diasConcluidos,
         dias: plano.dias.map((dia) => ({
           dia: dia.dia,

@@ -24,7 +24,8 @@ import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Input } from '@/components/ui/Input'
 import { Textarea } from '@/components/ui/Textarea'
-import { useConfirm, useToast } from '@/components/ui/Feedback'
+import { useToast } from '@/components/ui/Feedback'
+import { Modal } from '@/components/ui/Modal'
 import { cn } from '@/lib/utils'
 import { apiFetch } from '@/lib/api-fetch'
 
@@ -90,7 +91,7 @@ function parseTags(value: string) {
 
 export default function AnotacoesPage() {
   const toast = useToast()
-  const confirm = useConfirm()
+
   const reduceMotion = useReducedMotion()
   const [anotacoes, setAnotacoes] = useState<Anotacao[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
@@ -98,9 +99,12 @@ export default function AnotacoesPage() {
   const [loadStatus, setLoadStatus] = useState<LoadStatus>('loading')
   const [search, setSearch] = useState('')
   const [activeTag, setActiveTag] = useState<string>('Todas')
-  const [view, setView] = useState<'list' | 'editor'>('list')
+  const [view, setView] = useState<'list' | 'editor' | 'detail'>('list')
+  const [selectedNote, setSelectedNote] = useState<Anotacao | null>(null)
   const [editingNote, setEditingNote] = useState<Anotacao | null>(null)
   const [saving, setSaving] = useState(false)
+  const [noteToDelete, setNoteToDelete] = useState<Anotacao | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [formTitulo, setFormTitulo] = useState('')
   const [formConteudo, setFormConteudo] = useState('')
   const [formCor, setFormCor] = useState<keyof typeof NOTE_TONES>('amber')
@@ -159,6 +163,11 @@ export default function AnotacoesPage() {
     setFormCor(normalizeColor(nota.cor))
     setFormTags(nota.tags.join(', '))
     setView('editor')
+  }
+
+  const openDetail = (nota: Anotacao) => {
+    setSelectedNote(nota)
+    setView('detail')
   }
 
   const allTags = ['Todas', ...new Set(anotacoes.flatMap((anotacao) => anotacao.tags))]
@@ -227,21 +236,18 @@ export default function AnotacoesPage() {
   }
 
   const handleDelete = async (nota: Anotacao) => {
-    const accepted = await confirm({
-      title: 'Excluir anotação',
-      message: 'Esta anotação será removida permanentemente.',
-      danger: true,
-      confirmText: 'Excluir',
-    })
-    if (!accepted) return
-
+    setIsDeleting(true)
     try {
       const response = await fetch(`/api/anotacoes/${nota.id}`, { method: 'DELETE' })
       if (!response.ok) throw new Error('delete-failed')
       setAnotacoes((current) => current.filter((item) => item.id !== nota.id))
+      if (selectedNote?.id === nota.id) setView('list')
       toast.success('Anotação excluída.')
     } catch {
       toast.error('Não foi possível excluir a anotação.')
+    } finally {
+      setIsDeleting(false)
+      setNoteToDelete(null)
     }
   }
 
@@ -324,6 +330,39 @@ export default function AnotacoesPage() {
     )
   }
 
+  if (view === 'detail' && selectedNote) {
+    const tone = NOTE_TONES[normalizeColor(selectedNote.cor)]
+    return (
+      <WorkspacePage size="compact" archetype="marginalia">
+        <DetailHeader
+          variant="quiet"
+          index="Marginalia · anotação"
+          eyebrow={<><PenTool size={13} /> Anotação salva</>}
+          title={selectedNote.titulo}
+          description={`Criada em ${new Date(selectedNote.createdAt).toLocaleString('pt-BR')}`}
+          icon={FilePenLine}
+          actions={
+            <>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setView('list')}><ArrowLeft size={15} /> Acervo</Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => openEdit(selectedNote)}><Edit2 size={14} /> Editar</Button>
+            </>
+          }
+        />
+
+        <article className={cn('relative mt-6 rounded-2xl p-6 sm:p-10', tone.shell)}>
+          <span aria-hidden="true" className={cn('absolute inset-x-8 top-0 h-px opacity-80', tone.line)} />
+          <p className="whitespace-pre-wrap font-serif text-base leading-8 text-foreground">{selectedNote.conteudo}</p>
+          
+          {selectedNote.tags.length > 0 && (
+            <div className="mt-8 flex flex-wrap gap-2 border-t border-hairline pt-6">
+              {selectedNote.tags.map((tagName) => <Badge key={tagName} variant="outline"><Tag size={12} /> {tagName}</Badge>)}
+            </div>
+          )}
+        </article>
+      </WorkspacePage>
+    )
+  }
+
   return (
     <WorkspacePage size="full" archetype="marginalia">
       <PageHeader
@@ -402,10 +441,10 @@ export default function AnotacoesPage() {
       {loadStatus === 'success' && filtered.length > 0 && (
         <div className="space-y-10">
           {pinned.length > 0 && (
-            <NotesSection title="Fixadas" icon={Pin} notes={pinned} reduceMotion={Boolean(reduceMotion)} onPin={togglePin} onEdit={openEdit} onDelete={handleDelete} />
+            <NotesSection title="Fixadas" icon={Pin} notes={pinned} reduceMotion={Boolean(reduceMotion)} onPin={togglePin} onOpen={openDetail} onEdit={openEdit} onDelete={setNoteToDelete} />
           )}
           {unpinned.length > 0 && (
-            <NotesSection title="Recentes" icon={AlignLeft} notes={unpinned} reduceMotion={Boolean(reduceMotion)} onPin={togglePin} onEdit={openEdit} onDelete={handleDelete} />
+            <NotesSection title="Recentes" icon={AlignLeft} notes={unpinned} reduceMotion={Boolean(reduceMotion)} onPin={togglePin} onOpen={openDetail} onEdit={openEdit} onDelete={setNoteToDelete} />
           )}
         </div>
       )}
@@ -415,6 +454,30 @@ export default function AnotacoesPage() {
           <Button type="button" variant="outline" onClick={carregarMais} loading={loadingMore}>Carregar mais</Button>
         </div>
       )}
+
+      <Modal
+        isOpen={!!noteToDelete}
+        onClose={() => !isDeleting && setNoteToDelete(null)}
+        size="sm"
+      >
+        <div className="flex flex-col items-center text-center">
+          <span className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+            <Trash2 size={32} />
+          </span>
+          <h2 className="text-xl font-bold text-foreground">Excluir anotação</h2>
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+            A anotação <strong>{noteToDelete?.titulo}</strong> será removida permanentemente. Esta ação não pode ser desfeita.
+          </p>
+          <div className="mt-8 flex w-full flex-col-reverse gap-3 sm:flex-row">
+            <Button variant="outline" className="flex-1" onClick={() => setNoteToDelete(null)} disabled={isDeleting}>
+              Cancelar
+            </Button>
+            <Button variant="danger" className="flex-1" onClick={() => noteToDelete && handleDelete(noteToDelete)} loading={isDeleting}>
+              Confirmar exclusão
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </WorkspacePage>
   )
 }
@@ -425,6 +488,7 @@ function NotesSection({
   notes,
   reduceMotion,
   onPin,
+  onOpen,
   onEdit,
   onDelete,
 }: {
@@ -433,6 +497,7 @@ function NotesSection({
   notes: Anotacao[]
   reduceMotion: boolean
   onPin: (note: Anotacao) => void
+  onOpen: (note: Anotacao) => void
   onEdit: (note: Anotacao) => void
   onDelete: (note: Anotacao) => void
 }) {
@@ -459,14 +524,14 @@ function NotesSection({
             >
               <span aria-hidden="true" className={cn('absolute inset-x-6 top-0 h-px opacity-80', tone.line)} />
               <div className="flex items-start gap-3">
-                <div className="min-w-0 flex-1">
-                  <h3 className="line-clamp-2 text-lg font-semibold leading-snug text-foreground">{note.titulo}</h3>
+                <button type="button" onClick={() => onOpen(note)} className="min-w-0 flex-1 text-left">
+                  <h3 className="line-clamp-2 text-lg font-semibold leading-snug text-foreground hover:text-primary-hover transition-colors">{note.titulo}</h3>
                   <p className="mt-2 text-[11px] text-subtle">{new Date(note.createdAt).toLocaleString('pt-BR')}</p>
-                </div>
+                </button>
                 <button
                   type="button"
                   onClick={() => onPin(note)}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-hairline bg-background/25 text-subtle transition-colors hover:bg-elevated hover:text-foreground"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-hairline bg-background/25 text-subtle transition-colors hover:bg-elevated hover:text-foreground relative z-10"
                   aria-label={note.fixada ? `Desafixar ${note.titulo}` : `Fixar ${note.titulo}`}
                   title={note.fixada ? 'Desafixar' : 'Fixar'}
                 >
@@ -474,7 +539,9 @@ function NotesSection({
                 </button>
               </div>
 
-              <p className="mt-5 line-clamp-6 flex-1 whitespace-pre-line text-sm leading-7 text-muted-foreground">{note.conteudo}</p>
+              <button type="button" onClick={() => onOpen(note)} className="mt-5 line-clamp-6 flex-1 whitespace-pre-line text-sm leading-7 text-muted-foreground text-left">
+                {note.conteudo}
+              </button>
 
               {note.tags.length > 0 && (
                 <div className="mt-5 flex flex-wrap gap-1.5">

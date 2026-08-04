@@ -22,13 +22,15 @@ import {
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { DetailHeader, EditorActionBar, SectionHeading, WorkspacePage } from '@/components/layout/WorkspacePage'
+import { InteractiveVerse } from '@/components/ui/InteractiveVerse'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Input } from '@/components/ui/Input'
 import { Textarea } from '@/components/ui/Textarea'
 import { VerseSelector } from '@/components/ui/VerseSelector'
-import { useConfirm, useToast } from '@/components/ui/Feedback'
+import { useToast } from '@/components/ui/Feedback'
+import { Modal } from '@/components/ui/Modal'
 import { cn } from '@/lib/utils'
 import { apiFetch } from '@/lib/api-fetch'
 
@@ -145,7 +147,6 @@ const MODELOS_RAPIDOS: Array<{
 
 export default function EsbocosPage() {
   const toast = useToast()
-  const confirm = useConfirm()
   const reduceMotion = useReducedMotion()
   const searchParams = useSearchParams()
   const [esbocos, setEsbocos] = useState<EsbocoLocal[]>([])
@@ -160,6 +161,8 @@ export default function EsbocosPage() {
   const [itens, setItens] = useState<EsbocoItem[]>([{ nivel: 1, texto: '', versiculo: '' }])
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(false)
+  const [esbocoToDelete, setEsbocoToDelete] = useState<EsbocoLocal | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const refreshOutlines = async () => {
     const { esbocos: data, nextCursor } = await buscarEsbocos()
@@ -271,13 +274,7 @@ export default function EsbocosPage() {
   }
 
   const handleDeleteEsboco = async (esboco: EsbocoLocal) => {
-    const accepted = await confirm({
-      title: 'Excluir esboço',
-      message: `O esboço “${esboco.titulo}” será removido permanentemente.`,
-      danger: true,
-      confirmText: 'Excluir',
-    })
-    if (!accepted) return
+    setIsDeleting(true)
     try {
       const response = await fetch(`/api/esbocos/${esboco.id}`, { method: 'DELETE' })
       if (!response.ok) throw new Error('outline-delete-failed')
@@ -286,6 +283,9 @@ export default function EsbocosPage() {
       toast.success('Esboço excluído.')
     } catch {
       toast.error('Não foi possível excluir o esboço.')
+    } finally {
+      setIsDeleting(false)
+      setEsbocoToDelete(null)
     }
   }
 
@@ -445,7 +445,7 @@ export default function EsbocosPage() {
           title={selectedEsboco.titulo}
           description={`Criado em ${new Date(selectedEsboco.createdAt).toLocaleString('pt-BR')}`}
           icon={ListTree}
-          meta={selectedEsboco.textoBase ? <Badge variant="warning"><BookOpen size={12} /> {selectedEsboco.textoBase}</Badge> : undefined}
+          meta={selectedEsboco.textoBase ? <InteractiveVerse reference={selectedEsboco.textoBase} /> : undefined}
           actions={
             <>
               <Button type="button" variant="ghost" size="sm" onClick={() => setView('list')}><ArrowLeft size={15} /> Acervo</Button>
@@ -472,7 +472,7 @@ export default function EsbocosPage() {
                   </span>
                   <div className="min-w-0">
                     <p className={cn('whitespace-pre-wrap leading-7', item.nivel === 1 ? 'text-base font-semibold text-foreground sm:text-lg' : 'text-sm text-muted-foreground')}>{item.texto}</p>
-                    {item.versiculo && <Badge variant="warning" className="mt-2"><BookOpen size={11} /> {item.versiculo}</Badge>}
+                    {item.versiculo && <InteractiveVerse reference={item.versiculo} className="mt-3" />}
                   </div>
                 </div>
               </div>
@@ -484,7 +484,7 @@ export default function EsbocosPage() {
   }
 
   return (
-    <WorkspacePage size="full">
+    <WorkspacePage size="full" archetype="manuscript">
       <PageHeader
         variant="manuscript"
         index="Oficina homilética · linhas argumentais"
@@ -561,7 +561,7 @@ export default function EsbocosPage() {
                 <span className="mr-auto text-xs text-subtle">{new Date(esboco.createdAt).toLocaleDateString('pt-BR')}</span>
                 <Button type="button" variant="ghost" size="icon" onClick={() => openDetail(esboco)} aria-label={`Abrir ${esboco.titulo}`} className="h-9 w-9"><Eye size={14} /></Button>
                 <Button type="button" variant="ghost" size="icon" onClick={() => openEdit(esboco)} aria-label={`Editar ${esboco.titulo}`} className="h-9 w-9"><Edit2 size={14} /></Button>
-                <Button type="button" variant="ghost" size="icon" onClick={() => handleDeleteEsboco(esboco)} aria-label={`Excluir ${esboco.titulo}`} className="h-9 w-9 hover:bg-destructive/10 hover:text-destructive"><Trash2 size={14} /></Button>
+                <Button type="button" variant="ghost" size="icon" onClick={() => setEsbocoToDelete(esboco)} aria-label={`Excluir ${esboco.titulo}`} className="h-9 w-9 hover:bg-destructive/10 hover:text-destructive"><Trash2 size={14} /></Button>
                 <ChevronRight size={14} className="ml-1 text-subtle" />
               </div>
             </motion.article>
@@ -570,10 +570,34 @@ export default function EsbocosPage() {
       )}
 
       {loadStatus === 'success' && cursor && (
-        <div className="mt-6 flex justify-center">
-          <Button type="button" variant="outline" onClick={carregarMais} loading={loadingMore}>Carregar mais</Button>
+        <div className="mt-8 flex w-full items-center justify-center">
+          <Button variant="outline" loading={loadingMore} onClick={carregarMais}>Carregar mais esboços</Button>
         </div>
       )}
+
+      <Modal
+        isOpen={!!esbocoToDelete}
+        onClose={() => !isDeleting && setEsbocoToDelete(null)}
+        size="sm"
+      >
+        <div className="flex flex-col items-center text-center">
+          <span className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+            <Trash2 size={32} />
+          </span>
+          <h2 className="text-xl font-bold text-foreground">Excluir esboço</h2>
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+            O esboço <strong>{esbocoToDelete?.titulo}</strong> será removido permanentemente. Esta ação não pode ser desfeita.
+          </p>
+          <div className="mt-8 flex w-full flex-col-reverse gap-3 sm:flex-row">
+            <Button variant="outline" className="flex-1" onClick={() => setEsbocoToDelete(null)} disabled={isDeleting}>
+              Cancelar
+            </Button>
+            <Button variant="danger" className="flex-1" onClick={() => esbocoToDelete && handleDeleteEsboco(esbocoToDelete)} loading={isDeleting}>
+              Confirmar exclusão
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </WorkspacePage>
   )
 }

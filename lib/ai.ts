@@ -99,11 +99,13 @@ export async function generateSermon({
   texto,
   keyword,
   style = 'expositiva',
+  topicosBase,
 }: {
   tema: string
   texto: string
   keyword: string
   style?: string
+  topicosBase?: string
 }) {
   const { object } = await generateObject({
     model: getModel(),
@@ -121,6 +123,7 @@ Tema: ${promptData(tema, 500)}
 Texto bíblico base: ${promptData(texto, 2_000)}
 Palavra-chave: ${promptData(keyword, 300)}
 Estilo: ${promptData(style, 100)}
+${topicosBase ? `Estrutura base sugerida (tópicos e ideias prévias a serem aprofundados): ${promptData(topicosBase, 10_000)}` : ''}
 </dados>
 Crie introdução, três ou quatro tópicos com referências cruzadas, conclusão e aplicação. Use Markdown nos conteúdos, sem repetir cabeçalhos de seção.`,
   })
@@ -260,42 +263,88 @@ Retorne três referências relevantes, conceitos e uma sugestão de sermão. Nã
   return object
 }
 
-export async function generateReadingPlan({ tema, dias }: { tema: string; dias: number }) {
-  const { object } = await measured('reading-plan', () => generateObject({
+export async function moderatePlanTopic(tema: string) {
+  const { object } = await measured('plan-moderation', () => generateObject({
     model: getModel(),
-    maxOutputTokens: 8_000,
+    maxOutputTokens: 1000,
     schema: z.object({
-      titulo: z.string(),
-      descricao: z.string(),
-      categoria: z.string(),
-      dias: z
-        .array(
-          z.object({
-            titulo: z.string(),
-            referencia: z.string().describe('Referência bíblica real e precisa, ex.: "João 15:1-11"'),
-            reflexao: z.string(),
-            pergunta: z.string(),
-            acao: z.string(),
-            oracao: z.string(),
-          }),
-        )
-        .min(1),
+      isAppropriate: z.boolean(),
+      reason: z.string(),
     }),
-    prompt: `Você é um discipulador maduro e cuidadoso, elaborando um plano de leitura de ${dias} dia(s) sobre o tema em <dados>. ${UNTRUSTED_DATA_RULE}
-Regras inegociáveis:
-- Cada dia deve ancorar em uma PASSAGEM BÍBLICA REAL e existente, com referência precisa. Não invente livros, capítulos ou versículos, e não reproduza o texto bíblico literal se não tiver certeza — indique apenas a referência para o leitor abrir a própria Bíblia.
-- A reflexão deve ter profundidade pastoral e teológica, evitando frases genéricas ou superficiais.
-- Inclua sempre: uma pergunta pessoal para exame de consciência, uma ação prática concreta e uma oração guiada curta.
-- Incentive explicitamente a leitura direta das Escrituras e a oração; nunca substitua a Bíblia pelo resumo.
-Produza exatamente ${dias} dia(s), na ordem de leitura.
-<dados>${promptData(tema, 300)}</dados>`,
+    prompt: `Avalie o tema do plano de leitura bíblica: "${promptData(tema, 300)}".
+Ele foge totalmente do escopo bíblico/cristão, ou envolve assuntos perturbadores, ilegais, ofensivos ou indelicados?
+Se não for apropriado, defina isAppropriate como false e explique o motivo de forma curta.`
   }))
+  return object
+}
+
+export async function generateReadingPlan({ tema, dias }: { tema: string; dias: number }) {
+  // Para planos muito longos, vamos particionar a requisição em lotes (ex: 10 dias por vez).
+  // Isso evita o erro de timeout de 60s da Vercel.
+  const batchSize = 10
+  const batches = Math.ceil(dias / batchSize)
+  
+  let tituloGeral = ''
+  let descricaoGeral = ''
+  let categoriaGeral = ''
+  const todosDias: { titulo: string | null; referencia: string; reflexao: string; pergunta: string | null; acao: string | null; oracao: string | null }[] = []
+
+  // Geramos os lotes em sequência ou paralelo.
+  // Em Vercel hobby (60s), se rodarmos tudo em paralelo, corremos risco de rate limit e timeouts globais,
+  // mas rodar em paralelo economiza o tempo global da requisição. Vamos rodar batches em paralelo com Promise.all.
+  const chunkPromises = Array.from({ length: batches }).map(async (_, index) => {
+    const startDay = index * batchSize + 1
+    const currentBatchSize = Math.min(batchSize, dias - startDay + 1)
+    const endDay = startDay + currentBatchSize - 1
+
+    const { object } = await measured(`reading-plan-batch-${index}`, () => generateObject({
+      model: getModel(),
+      maxOutputTokens: 8_000,
+      schema: z.object({
+        titulo: z.string(),
+        descricao: z.string(),
+        categoria: z.string(),
+        dias: z.array(
+            z.object({
+              titulo: z.string(),
+              referencia: z.string().describe('Referência bíblica real e precisa, ex.: "João 15:1-11"'),
+              reflexao: z.string(),
+              pergunta: z.string(),
+              acao: z.string(),
+              oracao: z.string(),
+            })
+          ).min(1),
+      }),
+      prompt: `Você é um discipulador maduro e cuidadoso, elaborando a parte de um plano de leitura sobre o tema em <dados>. ${UNTRUSTED_DATA_RULE}
+Regras inegociáveis:
+- Cada dia deve ancorar em uma PASSAGEM BÍBLICA REAL e existente, com referência precisa. Não invente livros, capítulos ou versículos. Indique apenas a referência.
+- A reflexão deve ter profundidade pastoral e teológica.
+- Inclua sempre: uma pergunta pessoal, uma ação prática concreta e uma oração guiada curta.
+- ATENÇÃO: Você está gerando o LOTE do DIA ${startDay} até o DIA ${endDay}. Gere exatamente ${currentBatchSize} dias.
+<dados>${promptData(tema, 300)}</dados>`,
+    }))
+    
+    return { object, startDay }
+  })
+
+  const results = await Promise.all(chunkPromises)
+  // Ordena os lotes pelo startDay para garantir a ordem correta caso Promise.all retorne fora de ordem (não deveria, mas garante)
+  results.sort((a, b) => a.startDay - b.startDay)
+
+  results.forEach(({ object }, index) => {
+    if (index === 0) {
+      tituloGeral = object.titulo
+      descricaoGeral = object.descricao
+      categoriaGeral = object.categoria
+    }
+    todosDias.push(...object.dias)
+  })
 
   return {
-    titulo: object.titulo,
-    descricao: object.descricao,
-    categoria: object.categoria,
-    dias: object.dias.slice(0, dias).map((dia, index) => ({
+    titulo: tituloGeral,
+    descricao: descricaoGeral,
+    categoria: categoriaGeral,
+    dias: todosDias.slice(0, dias).map((dia, index) => ({
       dia: index + 1,
       titulo: dia.titulo,
       referencia: dia.referencia,

@@ -10,7 +10,6 @@ import {
   BrainCircuit,
   CalendarDays,
   CheckCircle2,
-  Eye,
   FileText,
   GraduationCap,
   LibraryBig,
@@ -22,6 +21,7 @@ import { DetailHeader, SectionHeading, WorkspacePage } from '@/components/layout
 import { Badge } from '@/components/ui/Badge'
 import { Button, buttonStyles } from '@/components/ui/Button'
 import { useConfirm, useToast } from '@/components/ui/Feedback'
+import { Modal } from '@/components/ui/Modal'
 
 type LicaoResumo = Pick<LicaoEBD, 'id' | 'numero' | 'titulo' | 'textoBase'>
 
@@ -85,14 +85,9 @@ export function RevistaClient({ revista }: { revista: RevistaDetalhada }) {
     }
   }
 
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+
   const handleDeleteRevista = async () => {
-    const confirmed = await confirm({
-      title: 'Excluir revista completa',
-      message: `“${revista.titulo}” e todas as suas lições serão removidas permanentemente.`,
-      danger: true,
-      confirmText: 'Excluir revista',
-    })
-    if (!confirmed) return
     setDeletingMagazine(true)
     try {
       const response = await fetch(`/api/ebd/revistas/${revista.id}`, { method: 'DELETE' })
@@ -103,6 +98,7 @@ export function RevistaClient({ revista }: { revista: RevistaDetalhada }) {
     } catch {
       toast.error('Não foi possível excluir a revista.')
       setDeletingMagazine(false)
+      setShowDeleteModal(false)
     }
   }
 
@@ -135,7 +131,7 @@ export function RevistaClient({ revista }: { revista: RevistaDetalhada }) {
           </>
         }
         actions={
-          <Button type="button" variant="ghost" size="sm" loading={deletingMagazine} onClick={handleDeleteRevista} className="hover:bg-destructive/10 hover:text-destructive">
+          <Button type="button" variant="ghost" size="sm" onClick={() => setShowDeleteModal(true)} className="hover:bg-destructive/10 hover:text-destructive">
             <Trash2 size={14} /> Excluir revista
           </Button>
         }
@@ -237,6 +233,30 @@ export function RevistaClient({ revista }: { revista: RevistaDetalhada }) {
           </div>
         </section>
       )}
+
+      <Modal
+        isOpen={showDeleteModal}
+        onClose={() => !deletingMagazine && setShowDeleteModal(false)}
+        size="sm"
+      >
+        <div className="flex flex-col items-center text-center">
+          <span className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10 text-destructive mb-4">
+            <Trash2 size={32} />
+          </span>
+          <h2 className="text-xl font-bold text-foreground">Excluir revista completa</h2>
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+            A revista <strong>{revista.titulo}</strong> e todas as suas lições serão removidas permanentemente. Esta ação não pode ser desfeita.
+          </p>
+          <div className="mt-8 flex w-full flex-col-reverse gap-3 sm:flex-row">
+            <Button variant="outline" className="flex-1" onClick={() => setShowDeleteModal(false)} disabled={deletingMagazine}>
+              Cancelar
+            </Button>
+            <Button variant="danger" className="flex-1" onClick={handleDeleteRevista} loading={deletingMagazine}>
+              Confirmar exclusão
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </WorkspacePage>
   )
 }
@@ -244,8 +264,7 @@ export function RevistaClient({ revista }: { revista: RevistaDetalhada }) {
 function LessonActions({ lesson, onDelete }: { lesson: LicaoResumo; onDelete: (lesson: LicaoResumo) => void }) {
   return (
     <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-hairline pt-4">
-      <Link href={`/ebd/${lesson.id}`} className={buttonStyles({ variant: 'secondary', size: 'sm', className: 'flex-1' })}><Eye size={14} /> Abrir lição</Link>
-      <Link href={`/ebd/${lesson.id}/assistente`} className={buttonStyles({ variant: 'outline', size: 'sm', className: 'flex-1' })}><BrainCircuit size={14} /> Assistente</Link>
+      <Link href={`/ebd/${lesson.id}`} className={buttonStyles({ variant: 'secondary', size: 'sm', className: 'flex-1' })}><BrainCircuit size={14} /> Abrir tutor da lição</Link>
       <Button type="button" variant="ghost" size="icon" onClick={() => onDelete(lesson)} aria-label={`Excluir ${cleanTitle(lesson.titulo)}`} className="h-9 w-9 hover:bg-destructive/10 hover:text-destructive"><Trash2 size={14} /></Button>
     </div>
   )

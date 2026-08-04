@@ -21,8 +21,9 @@ import { DetailHeader, EditorActionBar, SectionHeading, WorkspacePage } from '@/
 import { Badge } from '@/components/ui/Badge'
 import { Button, buttonStyles } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { IntelligentTextarea } from '@/components/ui/IntelligentTextarea'
+import { Modal } from '@/components/ui/Modal'
 import { Textarea } from '@/components/ui/Textarea'
+import { IntelligentTextarea } from '@/components/ui/IntelligentTextarea'
 import { VerseSelector } from '@/components/ui/VerseSelector'
 import { useConfirm, useToast } from '@/components/ui/Feedback'
 
@@ -186,6 +187,7 @@ export function SermonEditor(props: SermonEditorProps) {
   const [categoria, setCategoria] = useState(initialSermon?.categoria ?? '')
   const [savingAs, setSavingAs] = useState<'draft' | 'published' | null>(null)
   const [aiTask, setAiTask] = useState<'full' | 'selection' | null>(null)
+  const [aiModalOpen, setAiModalOpen] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   const hasDraftContent = Boolean(
@@ -271,23 +273,35 @@ export function SermonEditor(props: SermonEditorProps) {
     setTopicos(template.topics.map((topic) => ({ ...topic, versiculos: topic.versiculos || textoBase })))
   }
 
-  const generateFullSermon = async () => {
+  const triggerGenerate = () => {
     if (!textoBase.trim()) {
       setErrors((current) => ({ ...current, textoBase: 'Informe o texto base antes de gerar com IA.' }))
       toast.error('A IA precisa de um texto base para orientar a mensagem.')
       return
     }
-    if (hasDraftContent) {
-      const accepted = await confirm({
-        title: 'Substituir conteúdo com IA',
-        message: 'Introdução, tópicos, conclusão e aplicação atuais serão substituídos pela nova geração.',
-        confirmText: 'Gerar novo conteúdo',
-      })
-      if (!accepted) return
+    if (mode === 'edit' || hasDraftContent) {
+      setAiModalOpen(true)
+    } else {
+      generateFullSermon(false)
+    }
+  }
+
+  const generateFullSermon = async (fillBlanks: boolean = false) => {
+    setAiModalOpen(false)
+    if (!textoBase.trim()) {
+      setErrors((current) => ({ ...current, textoBase: 'Informe o texto base antes de gerar com IA.' }))
+      toast.error('A IA precisa de um texto base para orientar a mensagem.')
+      return
     }
 
     setAiTask('full')
     try {
+      const topicosBaseString = JSON.stringify({
+        introducao,
+        topicos,
+        conclusao,
+        aplicacao
+      })
       const response = await fetch('/api/ai/sermon', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -296,14 +310,38 @@ export function SermonEditor(props: SermonEditorProps) {
           texto: textoBase.trim(),
           keyword: titulo.trim(),
           style: categoria || 'Expositivo',
+          topicosBase: topicosBaseString
         }),
       })
       if (!response.ok) throw new Error('sermon-ai-failed')
       const data: AiSermonResponse = await response.json()
-      setIntroducao(data.sermon.introducao)
-      setTopicos(data.sermon.topicos.length ? data.sermon.topicos : [{ titulo: '', conteudo: '', versiculos: '' }])
-      setConclusao(data.sermon.conclusao)
-      setAplicacao(data.sermon.aplicacao)
+      
+      if (fillBlanks) {
+        if (!introducao.trim()) setIntroducao(data.sermon.introducao)
+        if (!conclusao.trim()) setConclusao(data.sermon.conclusao)
+        if (!aplicacao.trim()) setAplicacao(data.sermon.aplicacao)
+        
+        const newTopicos = [...topicos]
+        if (newTopicos.length === 0 || (newTopicos.length === 1 && !newTopicos[0].titulo.trim() && !newTopicos[0].conteudo.trim())) {
+           setTopicos(data.sermon.topicos)
+        } else {
+           data.sermon.topicos.forEach((aiTopic, idx) => {
+             if (idx < newTopicos.length) {
+               if (!newTopicos[idx].titulo.trim()) newTopicos[idx].titulo = aiTopic.titulo
+               if (!newTopicos[idx].conteudo.trim()) newTopicos[idx].conteudo = aiTopic.conteudo
+               if (!newTopicos[idx].versiculos.trim()) newTopicos[idx].versiculos = aiTopic.versiculos
+             } else {
+               newTopicos.push(aiTopic)
+             }
+           })
+           setTopicos(newTopicos)
+        }
+      } else {
+        setIntroducao(data.sermon.introducao)
+        setTopicos(data.sermon.topicos.length ? data.sermon.topicos : [{ titulo: '', conteudo: '', versiculos: '' }])
+        setConclusao(data.sermon.conclusao)
+        setAplicacao(data.sermon.aplicacao)
+      }
       toast.success('Estrutura gerada. Revise e personalize antes de publicar.')
     } catch {
       toast.error('Não foi possível gerar o sermão com IA.')
@@ -511,7 +549,7 @@ export function SermonEditor(props: SermonEditorProps) {
           <aside className="manuscript-editor-index space-y-5 xl:sticky xl:top-6">
             <section className="form-section form-section--accent">
               <SectionHeading icon={BrainCircuit} title="Copiloto homilético" description="Use a IA como ponto de partida, nunca como versão final." />
-              <Button type="button" loading={aiTask === 'full'} disabled={Boolean(aiTask)} onClick={generateFullSermon} className="w-full">
+              <Button type="button" loading={aiTask === 'full'} disabled={Boolean(aiTask)} onClick={triggerGenerate} className="w-full">
                 <Sparkles size={16} /> Gerar estrutura completa
               </Button>
               <p className="mt-3 text-[11px] leading-5 text-subtle">Requer texto base. Conteúdo existente só é substituído após confirmação.</p>
@@ -546,6 +584,33 @@ export function SermonEditor(props: SermonEditorProps) {
           <Button type="button" loading={savingAs === 'published'} disabled={Boolean(savingAs)} onClick={() => handleSave(true)} className="flex-1 sm:flex-none"><BookOpen size={16} /> {initialSermon?.publicado ? 'Atualizar publicado' : 'Publicar sermão'}</Button>
         </EditorActionBar>
       </form>
+
+      <Modal isOpen={aiModalOpen} onClose={() => setAiModalOpen(false)} title="Assistente de Sermão" size="md">
+        <p className="mb-4 text-sm text-muted-foreground">
+          Escolha como a IA deve trabalhar com o conteúdo existente deste sermão.
+        </p>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <button
+            type="button"
+            onClick={() => generateFullSermon(false)}
+            className="flex flex-1 flex-col items-center justify-center rounded-xl border border-hairline-strong bg-surface p-4 text-center transition-colors hover:border-primary/50 hover:bg-elevated"
+          >
+            <Sparkles size={24} className="mb-2 text-primary" />
+            <span className="font-semibold text-foreground">Refatoração Completa</span>
+            <span className="mt-1 text-xs text-subtle">A IA reescreverá todo o sermão usando seu rascunho como base. O conteúdo atual será substituído.</span>
+          </button>
+          
+          <button
+            type="button"
+            onClick={() => generateFullSermon(true)}
+            className="flex flex-1 flex-col items-center justify-center rounded-xl border border-hairline-strong bg-surface p-4 text-center transition-colors hover:border-primary/50 hover:bg-elevated"
+          >
+            <FileText size={24} className="mb-2 text-info" />
+            <span className="font-semibold text-foreground">Completar Espaços</span>
+            <span className="mt-1 text-xs text-subtle">A IA irá gerar conteúdo apenas para as caixas que estiverem vazias, preservando o que você já escreveu.</span>
+          </button>
+        </div>
+      </Modal>
     </WorkspacePage>
   )
 }

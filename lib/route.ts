@@ -30,7 +30,13 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
 function trustedOrigins(req: NextRequest) {
   const allowed = new Set([req.nextUrl.origin])
-  const candidates = [process.env.NEXT_PUBLIC_SITE_URL, ...(process.env.ALLOWED_ORIGINS ?? '').split(',')]
+  const candidates = [
+    process.env.NEXT_PUBLIC_SITE_URL, 
+    'http://localhost', 
+    'capacitor://localhost',
+    'ionic://localhost',
+    ...(process.env.ALLOWED_ORIGINS ?? '').split(',')
+  ]
 
   if (process.env.TRUST_PROXY === 'true') {
     const host = req.headers.get('x-forwarded-host')
@@ -41,6 +47,10 @@ function trustedOrigins(req: NextRequest) {
   for (const candidate of candidates) {
     const value = candidate?.trim()
     if (!value) continue
+    
+    // Add raw string first to handle custom protocols like capacitor://localhost
+    allowed.add(value)
+    
     try {
       allowed.add(new URL(value).origin)
     } catch {
@@ -68,7 +78,7 @@ function assertTrustedOrigin(req: NextRequest): void {
   const trusted = trustedOrigins(req)
 
   if (normalizedOrigin) {
-    if (!trusted.has(normalizedOrigin)) {
+    if (!trusted.has(normalizedOrigin) && !trusted.has(rawOrigin!)) {
       throw ApiErrors.forbidden(`Origem da requisição não permitida: ${normalizedOrigin}`)
     }
     // If the origin is explicitly trusted, we allow it even if it's cross-site.

@@ -16,6 +16,7 @@ import {
   Plus,
   Search,
   Trash2,
+  ChevronDown,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { apiFetch } from '@/lib/api-fetch'
@@ -24,6 +25,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { WorkspacePage } from '@/components/layout/WorkspacePage'
 import { Badge } from '@/components/ui/Badge'
 import { buttonStyles } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
 
 interface Sermao {
   id: string
@@ -50,6 +52,7 @@ export function SermoesClient({ sermoes, initialCursor }: { sermoes: Sermao[]; i
   const [categoriaFilter, setCategoriaFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft'>('all')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false)
 
   const carregarMais = async () => {
     if (!cursor || loadingMore) return
@@ -173,31 +176,68 @@ export function SermoesClient({ sermoes, initialCursor }: { sermoes: Sermao[]; i
         </section>
       )}
 
-      <section className="manuscript-toolbar" aria-label="Busca e filtros de sermões">
-        <div className="flex flex-col gap-2 xl:flex-row">
-          <div className="group relative min-w-0 flex-1">
+      <section className="manuscript-toolbar mb-8" aria-label="Busca e filtros de sermões">
+        <div className="flex flex-col items-center gap-4">
+          
+          {/* Busca (Centralizada e Grande) */}
+          <div className="group relative w-full max-w-2xl">
             <label htmlFor="sermon-search" className="sr-only">Buscar por título, tema ou texto base</label>
-            <Search aria-hidden="true" className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-subtle transition-colors group-focus-within:text-primary" />
+            <Search aria-hidden="true" className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-subtle transition-colors group-focus-within:text-primary" />
             <input
               id="sermon-search"
               type="search"
               placeholder="Buscar por título, tema ou texto base…"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              className="h-11 w-full rounded-xl bg-transparent pl-10 pr-4 text-sm text-foreground placeholder:text-subtle focus:outline-none"
+              className="h-14 w-full rounded-2xl border-2 border-transparent bg-elevated/50 pl-12 pr-4 text-base text-foreground placeholder:text-subtle shadow-sm transition-all focus:border-primary/30 focus:bg-surface focus:outline-none focus:ring-4 focus:ring-primary/10"
             />
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <label htmlFor="sermon-category" className="sr-only">Filtrar por categoria</label>
-            <select
-              id="sermon-category"
-              value={categoriaFilter}
-              onChange={(event) => setCategoriaFilter(event.target.value)}
-              className="h-11 min-w-44 rounded-xl border border-hairline bg-elevated px-3 text-sm text-muted-foreground transition-colors hover:border-hairline-strong focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+
+          {/* Filtros (Centralizados Abaixo) */}
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            
+            {/* Categoria Modal Trigger */}
+            <button
+              type="button"
+              onClick={() => setCategoryModalOpen(true)}
+              className="inline-flex h-10 items-center justify-between gap-2 rounded-xl border border-hairline bg-surface px-4 text-sm font-medium text-foreground shadow-sm transition-colors hover:border-hairline-strong hover:bg-elevated focus:outline-none focus:ring-2 focus:ring-primary/20 sm:min-w-44"
             >
-              <option value="all">Todas as categorias</option>
-              {CATEGORIAS.map((categoria) => <option key={categoria} value={categoria}>{categoria}</option>)}
-            </select>
+              <span>{categoriaFilter === 'all' ? 'Todas as categorias' : categoriaFilter}</span>
+              <ChevronDown size={16} className="text-muted-foreground" />
+            </button>
+
+            {/* Modal de Categorias */}
+            <Modal isOpen={categoryModalOpen} onClose={() => setCategoryModalOpen(false)} title="Selecione a Categoria">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => { setCategoriaFilter('all'); setCategoryModalOpen(false) }}
+                  className={cn(
+                    'flex items-center justify-between rounded-xl px-4 py-3 text-left text-sm font-medium transition-colors',
+                    categoriaFilter === 'all' ? 'bg-primary-soft text-primary' : 'bg-surface text-foreground hover:bg-elevated'
+                  )}
+                >
+                  Todas as categorias
+                  {categoriaFilter === 'all' && <CheckCircle2 size={16} />}
+                </button>
+                {CATEGORIAS.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => { setCategoriaFilter(cat); setCategoryModalOpen(false) }}
+                    className={cn(
+                      'flex items-center justify-between rounded-xl px-4 py-3 text-left text-sm font-medium transition-colors',
+                      categoriaFilter === cat ? 'bg-primary-soft text-primary' : 'bg-surface text-foreground hover:bg-elevated'
+                    )}
+                  >
+                    {cat}
+                    {categoriaFilter === cat && <CheckCircle2 size={16} />}
+                  </button>
+                ))}
+              </div>
+            </Modal>
+
+            {/* Filtros de Status */}
             <div className="flex rounded-xl border border-hairline bg-elevated/70 p-1" aria-label="Filtrar por status">
               {(['all', 'published', 'draft'] as const).map((status) => {
                 const label = status === 'all' ? 'Todos' : status === 'published' ? 'Publicados' : 'Rascunhos'
@@ -208,7 +248,7 @@ export function SermoesClient({ sermoes, initialCursor }: { sermoes: Sermao[]; i
                     aria-pressed={statusFilter === status}
                     onClick={() => setStatusFilter(status)}
                     className={cn(
-                      'flex-1 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-all',
+                      'flex-1 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-all',
                       statusFilter === status ? 'bg-surface text-foreground shadow-soft' : 'text-subtle hover:text-foreground',
                     )}
                   >
@@ -217,6 +257,7 @@ export function SermoesClient({ sermoes, initialCursor }: { sermoes: Sermao[]; i
                 )
               })}
             </div>
+
           </div>
         </div>
       </section>

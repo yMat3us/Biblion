@@ -75,6 +75,7 @@ export default function TeologiaPage() {
   const [expandedTopico, setExpandedTopico] = useState<number | null>(null)
   const [deepeningKey, setDeepeningKey] = useState<string | null>(null)
   const [deepStudy, setDeepStudy] = useState<Record<string, string>>({})
+  const [viewingDeepStudy, setViewingDeepStudy] = useState<{ doutrina: string, titulo: string, content: string } | null>(null)
 
   const normalizedSearch = search.trim().toLocaleLowerCase('pt-BR')
   const filtered = DOUTRINAS.filter((doutrina) => !normalizedSearch
@@ -100,7 +101,12 @@ export default function TeologiaPage() {
     index: number,
   ) => {
     const key = deepKey(doutrinaId, index)
-    if (deepStudy[key] || deepeningKey) return
+    if (deepStudy[key]) {
+      setViewingDeepStudy({ doutrina, titulo: topico.titulo, content: deepStudy[key] })
+      return
+    }
+    if (deepeningKey) return
+    
     setDeepeningKey(key)
     try {
       const response = await fetch('/api/ai/teologia', {
@@ -111,6 +117,7 @@ export default function TeologiaPage() {
       if (!response.ok) throw new Error('deep-study-failed')
       const data = await response.json() as { text: string }
       setDeepStudy((current) => ({ ...current, [key]: data.text }))
+      setViewingDeepStudy({ doutrina, titulo: topico.titulo, content: data.text })
     } catch {
       toast.error('Não foi possível aprofundar o estudo agora.')
     } finally {
@@ -121,7 +128,31 @@ export default function TeologiaPage() {
   return (
     <WorkspacePage size="full" archetype="atlas">
       <AnimatePresence mode="wait" initial={false}>
-        {!doutrinaAtual ? (
+        {viewingDeepStudy ? (
+          <motion.div
+            key="deep-study"
+            initial={reduceMotion ? false : { opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={reduceMotion ? undefined : { opacity: 0, y: 8 }}
+          >
+            <DetailHeader
+              variant="atlas"
+              index={`Teologia Sistemática · ${viewingDeepStudy.doutrina}`}
+              eyebrow={<><Sparkles size={13} /> Tesouros Teológicos</>}
+              title={viewingDeepStudy.titulo}
+              description="Análise aprofundada por Inteligência Artificial conectando raiz teológica e contexto bíblico."
+              icon={BrainCircuit}
+              actions={<Button type="button" variant="ghost" size="sm" onClick={() => setViewingDeepStudy(null)}><ArrowLeft size={15} /> Voltar ao tópico</Button>}
+            />
+            <div className="mx-auto max-w-4xl py-6 sm:py-10">
+              <article className="form-section form-section--accent">
+                <div className="prose max-w-none font-serif text-base leading-8 sm:text-lg">
+                  <Markdown>{viewingDeepStudy.content.replace(/^[ \t]+/gm, '')}</Markdown>
+                </div>
+              </article>
+            </div>
+          </motion.div>
+        ) : !doutrinaAtual ? (
           <motion.div
             key="catalog"
             initial={reduceMotion ? false : { opacity: 0, y: 10 }}
@@ -269,30 +300,16 @@ export default function TeologiaPage() {
                             <div className="mt-6 flex flex-wrap items-center gap-3">
                               <Button
                                 type="button"
-                                variant="secondary"
+                                variant={deepStudy[key] ? 'primary' : 'secondary'}
                                 loading={loading}
-                                disabled={Boolean(deepStudy[key]) || Boolean(deepeningKey && !loading)}
+                                disabled={Boolean(deepeningKey && !loading)}
                                 onClick={() => handleDeepen(doutrinaAtual.id, doutrinaAtual.nome, topico, index)}
                               >
-                                {!loading && <BrainCircuit size={16} />}
-                                {deepStudy[key] ? 'Revelação Extraída' : 'Receber inspirações'}
+                                {!loading && (deepStudy[key] ? <Sparkles size={16} /> : <BrainCircuit size={16} />)}
+                                {deepStudy[key] ? 'Abrir análise teológica' : 'Receber inspirações'}
                               </Button>
                               {!deepStudy[key] && <p className="text-xs text-subtle">Busca o contexto, as raízes teológicas e a aplicação para hoje.</p>}
                             </div>
-
-                            {deepStudy[key] && (
-                              <motion.section
-                                initial={reduceMotion ? false : { opacity: 0, y: 8 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="form-section form-section--accent mt-6"
-                                aria-label="Estudo aprofundado por inteligência artificial"
-                              >
-                                <p className="eyebrow mb-4 flex items-center gap-2 text-primary-hover"><Sparkles size={14} /> Tesouros Teológicos</p>
-                                <div className="prose max-w-none text-sm sm:text-base">
-                                  <Markdown>{deepStudy[key].replace(/^[ \t]+/gm, '')}</Markdown>
-                                </div>
-                              </motion.section>
-                            )}
                           </div>
                         </motion.div>
                       )}

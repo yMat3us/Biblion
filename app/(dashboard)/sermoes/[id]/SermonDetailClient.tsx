@@ -20,11 +20,15 @@ import {
   Target,
   Trash2,
   TriangleAlert,
+  Maximize2,
+  ArrowLeft,
 } from 'lucide-react'
 import { DetailHeader, SectionHeading, WorkspacePage } from '@/components/layout/WorkspacePage'
 import { Badge } from '@/components/ui/Badge'
 import { Button, buttonStyles } from '@/components/ui/Button'
 import { useConfirm, useToast } from '@/components/ui/Feedback'
+import { InteractiveVerse } from '@/components/ui/InteractiveVerse'
+import { Markdown } from '@/components/ui/Markdown'
 import { formatDate } from '@/lib/utils'
 
 interface Sermon {
@@ -98,6 +102,7 @@ export function SermonDetailClient({ sermao }: { sermao: Sermon }) {
   const [savingVisibility, setSavingVisibility] = useState(false)
   const [relatedContent, setRelatedContent] = useState<RelatedContent | null>(null)
   const [relatedStatus, setRelatedStatus] = useState<RelatedStatus>('loading')
+  const [isReadingMode, setIsReadingMode] = useState(false)
 
   async function setVisibilidade(next: string) {
     if (savingVisibility || next === visibility) return
@@ -183,6 +188,91 @@ export function SermonDetailClient({ sermao }: { sermao: Sermon }) {
     }
   }
 
+  if (isReadingMode) {
+    return (
+      <div className="fixed inset-0 z-50 overflow-y-auto bg-background p-4 sm:p-8">
+        <div className="mx-auto max-w-3xl pb-24 pt-8">
+          <button 
+            onClick={() => setIsReadingMode(false)}
+            className="mb-8 inline-flex items-center gap-2 rounded-full border border-hairline bg-surface px-4 py-2 text-sm font-medium text-muted-foreground shadow-sm hover:text-foreground transition-colors"
+          >
+            <ArrowLeft size={16} /> Voltar ao sermão
+          </button>
+          
+          <div className="mb-12 text-center">
+            {sermao.tema && <span className="mb-3 block text-sm font-bold uppercase tracking-widest text-primary">{sermao.tema}</span>}
+            <h1 className="font-serif text-3xl font-bold text-foreground sm:text-5xl">{sermao.titulo}</h1>
+            <p className="mt-4 font-serif text-xl text-muted-foreground flex items-center justify-center gap-2">
+               <BookOpen size={20} className="text-primary/70" /> {sermao.textoBase}
+            </p>
+          </div>
+
+          <div className="space-y-12">
+            {sermao.introducao && (
+              <div className="prose prose-lg prose-p:leading-relaxed prose-headings:font-serif max-w-none text-foreground/90">
+                <p className="font-serif text-lg italic text-muted-foreground mb-4">Introdução</p>
+                <Markdown>{sermao.introducao}</Markdown>
+              </div>
+            )}
+
+            {visibleTopics.map((topic, index) => (
+              <div key={index} className="space-y-6">
+                <h2 className="font-serif text-2xl font-bold text-foreground">
+                  <span className="text-primary mr-3">{index + 1}.</span>
+                  {topic.titulo}
+                </h2>
+                {topic.versiculos && (
+                   <InteractiveVerse reference={topic.versiculos} className="mb-4" />
+                )}
+                {topic.conteudo && (
+                  <div className="prose prose-lg prose-p:leading-relaxed prose-headings:font-serif max-w-none text-foreground/90">
+                    <Markdown>{topic.conteudo}</Markdown>
+                  </div>
+                )}
+                
+                {topic.subtopicos && topic.subtopicos.length > 0 && (
+                  <div className="pl-6 border-l-2 border-primary/20 space-y-6 mt-6">
+                    {topic.subtopicos.map((sub, subIdx) => (
+                      <div key={subIdx}>
+                         <h3 className="font-serif text-xl font-semibold text-foreground mb-3">{sub.titulo}</h3>
+                         {sub.versiculos && <InteractiveVerse reference={sub.versiculos} className="mb-4" />}
+                         {sub.conteudo && (
+                            <div className="prose prose-lg prose-p:leading-relaxed max-w-none text-foreground/80">
+                              <Markdown>{sub.conteudo}</Markdown>
+                            </div>
+                         )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {sermao.conclusao && (
+              <div className="mt-16 pt-8 border-t border-hairline prose prose-lg prose-p:leading-relaxed max-w-none text-foreground/90">
+                <p className="font-serif text-lg italic text-muted-foreground mb-4">Conclusão</p>
+                <Markdown>{sermao.conclusao}</Markdown>
+              </div>
+            )}
+
+            {sermao.aplicacao && (
+              <div className="rounded-3xl bg-primary/5 p-8 shadow-inner border border-primary/10 mt-8 prose prose-lg max-w-none">
+                <p className="font-serif text-lg font-semibold text-primary mb-4 flex items-center gap-2"><Target size={20} /> Aplicação Prática</p>
+                <Markdown>{sermao.aplicacao}</Markdown>
+              </div>
+            )}
+          </div>
+          
+          <div className="fixed bottom-0 left-0 right-0 border-t border-hairline bg-background/80 p-4 backdrop-blur-lg sm:p-6 text-center">
+             <Button variant="outline" onClick={() => setIsReadingMode(false)}>
+                <ArrowLeft size={16} className="mr-2" /> Fechar Modo de Leitura
+             </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <WorkspacePage size="wide" archetype="manuscript">
       <DetailHeader
@@ -204,6 +294,9 @@ export function SermonDetailClient({ sermao }: { sermao: Sermon }) {
         }
         actions={
           <>
+            <Button type="button" variant="outline" size="sm" onClick={() => setIsReadingMode(true)}>
+              <Maximize2 size={14} className="mr-1.5" /> Modo de Leitura
+            </Button>
             <Button type="button" variant="outline" size="sm" onClick={handleCopy}>{copied ? <CheckCircle2 size={14} className="text-success" /> : <Copy size={14} />}{copied ? 'Copiado' : 'Copiar'}</Button>
             <Link href={`/sermoes/${sermao.id}/editar`} className={buttonStyles({ variant: 'secondary', size: 'sm' })}><Edit size={14} /> Editar</Link>
             <Button type="button" variant="ghost" size="sm" onClick={handleDelete} className="hover:bg-destructive/10 hover:text-destructive"><Trash2 size={14} /> Excluir</Button>
@@ -257,7 +350,7 @@ export function SermonDetailClient({ sermao }: { sermao: Sermon }) {
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary text-xs font-semibold text-primary-foreground shadow-glow">{index + 1}</span>
                       <div className="min-w-0 flex-1">
                         {topic.titulo && <h3 className="text-lg font-semibold text-foreground">{topic.titulo}</h3>}
-                        {topic.versiculos && <Badge variant="warning" className="mt-2"><BookOpen size={11} /> {topic.versiculos}</Badge>}
+                        {topic.versiculos && <InteractiveVerse reference={topic.versiculos} className="mt-2" />}
                         {topic.conteudo && <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-muted-foreground">{topic.conteudo}</p>}
 
                         {topic.subtopicos && topic.subtopicos.length > 0 && (
@@ -266,7 +359,7 @@ export function SermonDetailClient({ sermao }: { sermao: Sermon }) {
                               <div key={`${subtopic.titulo}-${subIndex}`} className="manuscript-submovement">
                                 <div className="flex items-center gap-2"><Badge variant="outline">{index + 1}.{subIndex + 1}</Badge><h4 className="text-sm font-semibold text-foreground">{subtopic.titulo}</h4></div>
                                 {subtopic.conteudo && <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-muted-foreground">{subtopic.conteudo}</p>}
-                                {subtopic.versiculos && <p className="mt-2 flex items-center gap-1.5 text-xs text-scripture"><BookOpen size={12} /> {subtopic.versiculos}</p>}
+                                {subtopic.versiculos && <InteractiveVerse reference={subtopic.versiculos} className="mt-2" />}
                               </div>
                             ))}
                           </div>

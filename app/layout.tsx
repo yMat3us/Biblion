@@ -6,6 +6,7 @@ import { accentFor } from '@/types/auth'
 import { FeedbackProvider } from '@/components/ui/Feedback'
 import { AmbientBackground } from '@/components/ui/AmbientBackground'
 import { ServiceWorkerRegistrar } from '@/components/pwa/ServiceWorkerRegistrar'
+import { MobileAppProvider } from '@/components/mobile/MobileAppProvider'
 import { initServerTaint } from '@/lib/taint'
 
 // Marca segredos de ambiente como não-serializáveis ao client (defesa em profundidade).
@@ -89,7 +90,10 @@ export default async function RootLayout({
       <body className={`${inter.variable} ${playfair.variable} font-sans`}>
         <AmbientBackground />
         <ServiceWorkerRegistrar />
-        <FeedbackProvider>{children}</FeedbackProvider>
+        <FeedbackProvider>
+          <MobileAppProvider />
+          {children}
+        </FeedbackProvider>
       </body>
     </html>
   )

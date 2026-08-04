@@ -59,6 +59,8 @@ model User {
   readingPlans       ReadingPlan[]
   planEnrollments    PlanEnrollment[]
   // Social e comunicação.
+  planInvitationsSent  PlanInvitation[]         @relation("PlanInviter")
+  planInvitationsRecv  PlanInvitation[]         @relation("PlanInvitee")
   friendshipsSent     Friendship[]              @relation("FriendshipRequester")
   friendshipsReceived Friendship[]              @relation("FriendshipAddressee")
   blocksInitiated     Block[]                   @relation("BlockBlocker")
@@ -231,6 +233,18 @@ enum PlanSource {
   OFFICIAL
 }
 
+enum PlanStatus {
+  APPROVED
+  PENDING_APPROVAL
+  REJECTED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
 enum EnrollmentStatus {
   ACTIVE
   COMPLETED
@@ -248,11 +262,16 @@ model ReadingPlan {
   duracaoDias Int              @default(0)
   visibility  Visibility       @default(PRIVATE)
   source      PlanSource       @default(USER)
+  status      PlanStatus       @default(APPROVED)
+  approvalReason String?
+  aiWarning      Boolean       @default(false)
+  aiWarningReason String?
   oficial     Boolean          @default(false)
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
   dias        PlanDay[]
   enrollments PlanEnrollment[]
+  invitations PlanInvitation[]
 
   @@index([visibility, categoria])
   @@index([ownerId, updatedAt])
@@ -305,6 +324,22 @@ model DayProgress {
   completedAt  DateTime       @default(now())
 
   @@unique([enrollmentId, dia])
+}
+
+model PlanInvitation {
+  id          String           @id @default(auto()) @map("_id") @db.ObjectId
+  planId      String           @db.ObjectId
+  plan        ReadingPlan      @relation(fields: [planId], references: [id], onDelete: Cascade)
+  inviterId   String           @db.ObjectId
+  inviter     User             @relation("PlanInviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  inviteeId   String           @db.ObjectId
+  invitee     User             @relation("PlanInvitee", fields: [inviteeId], references: [id], onDelete: Cascade)
+  status      InvitationStatus @default(PENDING)
+  createdAt   DateTime         @default(now())
+  respondedAt DateTime?
+
+  @@unique([planId, inviteeId])
+  @@index([inviteeId, status])
 }
 
 // ===========================================================================

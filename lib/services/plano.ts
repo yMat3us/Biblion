@@ -36,7 +36,14 @@ const PLAN_CARD_SELECT = {
  * resto da aplicação.
  */
 function viewableWhere(userId: string): Prisma.ReadingPlanWhereInput {
-  return { OR: [{ ownerId: userId }, { visibility: Visibility.PUBLIC }, { oficial: true }] }
+  return {
+    OR: [
+      { ownerId: userId },
+      { visibility: Visibility.PUBLIC },
+      { oficial: true },
+      { invitations: { some: { inviteeId: userId } } }
+    ],
+  }
 }
 
 type PlanCard = Prisma.ReadingPlanGetPayload<{ select: typeof PLAN_CARD_SELECT }>
@@ -85,7 +92,15 @@ async function assertOwned(userId: string, planId: string) {
   return plan
 }
 
-function persistPlan(userId: string, source: PlanSource, data: CreateInput) {
+function persistPlan(
+  userId: string, 
+  source: PlanSource, 
+  data: CreateInput, 
+  status: Prisma.ReadingPlanCreateInput['status'] = 'APPROVED',
+  approvalReason?: string,
+  aiWarning: boolean = false,
+  aiWarningReason?: string
+) {
   const { dias, visibility, descricao, categoria, capaCor, titulo } = data
   return prisma.readingPlan.create({
     data: {
@@ -96,6 +111,10 @@ function persistPlan(userId: string, source: PlanSource, data: CreateInput) {
       capaCor: capaCor ?? null,
       visibility,
       source,
+      status,
+      approvalReason,
+      aiWarning,
+      aiWarningReason,
       duracaoDias: dias.length,
       dias: {
         create: dias.map((dia) => ({
@@ -237,7 +256,7 @@ export const PlanoService = {
     )
     if (!plan) throw ApiErrors.notFound('Plano não encontrado')
 
-    const [enrollment, favorito] = await Promise.all([
+    const [enrollment, favorito, invitation] = await Promise.all([
       prisma.planEnrollment.findUnique({
         where: { userId_planId: { userId, planId } },
         select: { status: true, diaAtual: true, startedAt: true, completedAt: true, progresso: { select: { dia: true } } },
@@ -246,6 +265,10 @@ export const PlanoService = {
         where: { ownerId_tipo_referencia: { ownerId: userId, tipo: FAVORITE_TYPE, referencia: planId } },
         select: { id: true },
       }),
+      prisma.planInvitation.findUnique({
+        where: { planId_inviteeId: { planId, inviteeId: userId } },
+        select: { status: true },
+      }),
     ])
 
     return {
@@ -253,14 +276,27 @@ export const PlanoService = {
       isOwner: plan.ownerId === userId,
       favorito: Boolean(favorito),
       matricula: enrollment ? { status: enrollment.status, diaAtual: enrollment.diaAtual } : null,
+      convite: invitation ? { status: invitation.status } : null,
       diasConcluidos: enrollment?.progresso.map((row) => row.dia) ?? [],
     }
   },
 
-  create: (userId: string, data: CreateInput) => persistPlan(userId, PlanSource.USER, data),
+  create: (userId: string, data: CreateInput) => {
+    const isLongo = data.dias.length > 60
+    const status = isLongo ? 'PENDING_APPROVAL' : 'APPROVED'
+    return persistPlan(userId, PlanSource.USER, data, status, isLongo ? data.motivo : undefined)
+  },
 
-  createFromAI: (userId: string, generated: GeneratedPlan, visibility: CreateInput['visibility']) =>
-    persistPlan(userId, PlanSource.AI, { ...generated, visibility }),
+  createFromAI: (
+    userId: string, 
+    generated: GeneratedPlan, 
+    visibility: CreateInput['visibility'],
+    status: Prisma.ReadingPlanCreateInput['status'] = 'APPROVED',
+    approvalReason?: string,
+    aiWarning: boolean = false,
+    aiWarningReason?: string
+  ) =>
+    persistPlan(userId, PlanSource.AI, { ...generated, visibility }, status, approvalReason, aiWarning, aiWarningReason),
 
   update: async (userId: string, planId: string, data: UpdateInput) => {
     await assertOwned(userId, planId)

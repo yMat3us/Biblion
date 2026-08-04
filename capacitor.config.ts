@@ -34,16 +34,16 @@ const config: CapacitorConfig = {
   appId: 'com.biblion.app',
   appName: 'Biblion',
   webDir: 'out',
-  ...(serverUrl
+  server: serverUrl 
     ? {
-        server: {
-          url: serverUrl.origin,
-          cleartext: serverUrl.protocol === 'http:',
-          androidScheme: serverUrl.protocol === 'http:' ? 'http' : 'https',
-          allowNavigation: [serverUrl.hostname],
-        },
+        url: serverUrl.origin,
+        cleartext: true,
+        androidScheme: serverUrl.protocol === 'http:' ? 'http' : 'https',
+        allowNavigation: [serverUrl.hostname],
       }
-    : {}),
+    : {
+        cleartext: true,
+      },
   android: {
     allowMixedContent: false,
     backgroundColor: '#08090c',
@@ -57,10 +57,6 @@ const config: CapacitorConfig = {
       androidSplashResourceName: 'splash',
       showSpinner: true,
       spinnerColor: '#7c6cf6',
-    },
-    StatusBar: {
-      style: 'DARK',
-      backgroundColor: '#08090c',
     },
   },
 }

@@ -90,7 +90,7 @@ export function Modal({ isOpen, onClose, title, description, children, size = 'm
   }
 
   return (
-    <div className="modal-layer fixed inset-0 z-[120] flex items-end justify-center p-0 sm:items-center sm:p-4">
+    <div className="modal-layer fixed inset-0 z-[120] flex items-center justify-center p-4">
       <div
         aria-hidden="true"
         className="absolute inset-0 bg-black/72 backdrop-blur-md"
@@ -106,7 +106,7 @@ export function Modal({ isOpen, onClose, title, description, children, size = 'm
         tabIndex={-1}
         className={cn(
           'animate-modal-in top-sheen relative flex max-h-[min(90dvh,52rem)] w-full flex-col overflow-hidden',
-          'rounded-t-[1.6rem] border border-hairline-strong bg-overlay shadow-overlay sm:rounded-[1.6rem]',
+          'rounded-[1.6rem] border border-hairline-strong bg-overlay shadow-overlay',
           sizes[size],
         )}
       >

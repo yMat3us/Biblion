@@ -143,6 +143,51 @@ export function DashboardLayout({
     return () => window.removeEventListener('keydown', onKey)
   }, [router])
 
+
+
+  useEffect(() => {
+    if (isDesktop) return
+
+    let touchStartX = 0
+    let touchStartY = 0
+    const handleTouchStart = (e: TouchEvent) => {
+      touchStartX = e.changedTouches[0].screenX
+      touchStartY = e.changedTouches[0].screenY
+    }
+    const handleTouchEnd = (e: TouchEvent) => {
+      const touchEndX = e.changedTouches[0].screenX
+      const touchEndY = e.changedTouches[0].screenY
+      const deltaX = touchEndX - touchStartX
+      const deltaY = Math.abs(touchEndY - touchStartY)
+      
+      // Prevent triggering when scrolling vertically
+      if (deltaY > 50) return
+      
+      const isLeftHalf = touchStartX < (window.innerWidth / 2)
+
+      // Abrir o menu se deslizar da metade esquerda para a direita (lado esquerdo para o meio)
+      // apenas nas páginas raiz
+      const isRootPage = ['/dashboard', '/biblia', '/sermoes', '/planos', '/hinos', '/ebd', '/tutor', '/amigos'].includes(pathname)
+      if (!isMobileMenuOpen && isLeftHalf && deltaX > 60 && isRootPage) {
+        setIsMobileMenuOpen(true)
+      }
+      
+      // Fechar o menu se deslizar para qualquer direção que remeta a fechar, 
+      // ou se ele explicitly puxar do meio para a esquerda/direita para fechar
+      if (isMobileMenuOpen && Math.abs(deltaX) > 60) {
+        setIsMobileMenuOpen(false)
+      }
+    }
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true })
+    window.addEventListener('touchend', handleTouchEnd, { passive: true })
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart)
+      window.removeEventListener('touchend', handleTouchEnd)
+    }
+  }, [isDesktop, isMobileMenuOpen])
+
   return (
     <>
       <style suppressHydrationWarning>{`

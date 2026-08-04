@@ -29,12 +29,17 @@ export default function BibliaPage() {
   const [testamento, setTestamento] = useState<'ALL' | 'AT' | 'NT'>('ALL')
   const shouldReduceMotion = useReducedMotion()
 
-  const normalizedSearch = search.trim().toLocaleLowerCase('pt-BR')
+  const removeAccents = (str: string) => str.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const normalizedSearch = removeAccents(search.trim().toLocaleLowerCase('pt-BR'))
   const filteredLivros = useMemo(() => LIVROS_BIBLIA.filter((livro) => {
+    const nome = removeAccents(livro.nome.toLocaleLowerCase('pt-BR'))
+    const abreviacao = removeAccents(livro.abreviacao.toLocaleLowerCase('pt-BR'))
+    const categoria = removeAccents(livro.categoria.toLocaleLowerCase('pt-BR'))
+
     const matchesSearch = !normalizedSearch
-      || livro.nome.toLocaleLowerCase('pt-BR').includes(normalizedSearch)
-      || livro.abreviacao.toLocaleLowerCase('pt-BR').includes(normalizedSearch)
-      || livro.categoria.toLocaleLowerCase('pt-BR').includes(normalizedSearch)
+      || nome.includes(normalizedSearch)
+      || abreviacao.includes(normalizedSearch)
+      || categoria.includes(normalizedSearch)
     const matchesTestament = testamento === 'ALL' || livro.testamento === testamento
     return matchesSearch && matchesTestament
   }), [normalizedSearch, testamento])
@@ -112,6 +117,7 @@ export default function BibliaPage() {
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline"><BookOpen size={12} /> 66 livros</Badge>
             <Badge variant="outline">{chapterCount.toLocaleString('pt-BR')} capítulos</Badge>
+            <Badge variant="outline">31.102 versículos</Badge>
             <Badge variant="warning">Antiga e Nova Aliança</Badge>
           </div>
         }
@@ -142,7 +148,7 @@ export default function BibliaPage() {
         </div>
       </section>
 
-      <section className="reading-dock bible-catalog-toolbar sticky top-3 z-20 mb-7 flex flex-col gap-2 p-2 sm:flex-row" aria-label="Busca e filtros da Bíblia">
+      <section className="reading-dock bible-catalog-toolbar mb-7 flex flex-col gap-2 p-2 sm:flex-row" aria-label="Busca e filtros da Bíblia">
         <div className="group relative flex-1">
           <label htmlFor="book-search" className="sr-only">Buscar livro, abreviação ou categoria</label>
           <Search aria-hidden="true" className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-subtle transition-colors group-focus-within:text-scripture" />

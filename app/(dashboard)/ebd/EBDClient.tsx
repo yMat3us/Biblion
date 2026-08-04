@@ -1,7 +1,8 @@
 'use client'
 
-import type { RevistaEBD } from '@prisma/client'
 import { useState } from 'react'
+
+import type { RevistaEBD } from '@prisma/client'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -12,17 +13,12 @@ import {
   Calendar,
   FileText,
   GraduationCap,
-  ImageIcon,
   Library,
   Plus,
-  Upload,
 } from 'lucide-react'
-import { useToast } from '@/components/ui/Feedback'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { WorkspacePage } from '@/components/layout/WorkspacePage'
 import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
-import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 
 type RevistaSummary = Pick<
@@ -30,99 +26,12 @@ type RevistaSummary = Pick<
   'id' | 'titulo' | 'tema' | 'trimestre' | 'ano' | 'createdAt' | 'updatedAt'
 > & { _count: { licoes: number } }
 
-function downscaleImage(file: File, maxWidth = 400, maxHeight = 600): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const image = new window.Image()
-    const objectUrl = URL.createObjectURL(file)
-
-    const releaseUrl = () => URL.revokeObjectURL(objectUrl)
-    image.onload = () => {
-      let { width, height } = image
-      if (width > maxWidth || height > maxHeight) {
-        const ratio = Math.min(maxWidth / width, maxHeight / height)
-        width = Math.round(width * ratio)
-        height = Math.round(height * ratio)
-      }
-
-      const canvas = document.createElement('canvas')
-      canvas.width = width
-      canvas.height = height
-      const context = canvas.getContext('2d')
-      if (!context) {
-        releaseUrl()
-        reject(new Error('Canvas 2D context unavailable'))
-        return
-      }
-
-      context.drawImage(image, 0, 0, width, height)
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.82)
-      releaseUrl()
-      resolve(dataUrl)
-    }
-    image.onerror = () => {
-      releaseUrl()
-      reject(new Error('Failed to load image'))
-    }
-    image.src = objectUrl
-  })
-}
-
 export function EBDClient({ initialRevistas }: { initialRevistas: RevistaSummary[] }) {
-  const toast = useToast()
-  const router = useRouter()
   const shouldReduceMotion = useReducedMotion()
-  const [showModal, setShowModal] = useState(false)
-  const [novaRevista, setNovaRevista] = useState({ titulo: '', trimestre: '', ano: '', tema: '', capa: '' })
-  const [loading, setLoading] = useState(false)
-  const [processingCover, setProcessingCover] = useState(false)
+  const router = useRouter()
 
   const totalLessons = initialRevistas.reduce((total, revista) => total + revista._count.licoes, 0)
   const activeYears = new Set(initialRevistas.map((revista) => revista.ano).filter(Boolean)).size
-
-  const handleCapaUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-    if (!file.type.startsWith('image/')) {
-      toast.error('Selecione um arquivo de imagem válido.')
-      return
-    }
-    if (file.size > 8 * 1024 * 1024) {
-      toast.error('A imagem deve ter no máximo 8 MB.')
-      return
-    }
-
-    setProcessingCover(true)
-    try {
-      const capa = await downscaleImage(file)
-      setNovaRevista((current) => ({ ...current, capa }))
-    } catch {
-      toast.error('Não foi possível processar a capa. Tente outra imagem.')
-    } finally {
-      setProcessingCover(false)
-    }
-  }
-
-  const handleCreateRevista = async (event: React.FormEvent) => {
-    event.preventDefault()
-    setLoading(true)
-    try {
-      const response = await fetch('/api/ebd/revistas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(novaRevista),
-      })
-      if (response.ok) {
-        const revista = await response.json()
-        router.push(`/ebd/revista/${revista.id}`)
-      } else {
-        toast.error('Erro ao criar a revista.')
-      }
-    } catch {
-      toast.error('Erro de conexão ao criar a revista.')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   return (
     <WorkspacePage size="full" archetype="library">
@@ -140,7 +49,7 @@ export function EBDClient({ initialRevistas }: { initialRevistas: RevistaSummary
           </div>
         }
         action={
-          <Button size="lg" onClick={() => setShowModal(true)}>
+          <Button size="lg" onClick={() => router.push('/ebd/nova-revista')}>
             <Plus size={17} /> Adicionar revista
           </Button>
         }
@@ -182,7 +91,7 @@ export function EBDClient({ initialRevistas }: { initialRevistas: RevistaSummary
           <p className="relative mt-3 max-w-md text-sm leading-relaxed text-muted-foreground">
             Cadastre uma revista, organize as lições e mantenha todo o preparo das aulas em um único lugar.
           </p>
-          <Button className="relative mt-7" onClick={() => setShowModal(true)}>
+          <Button className="relative mt-7" onClick={() => router.push('/ebd/nova-revista')}>
             <Plus size={16} /> Adicionar primeira revista
           </Button>
         </section>
@@ -195,71 +104,6 @@ export function EBDClient({ initialRevistas }: { initialRevistas: RevistaSummary
           {initialRevistas.map((revista) => <RevistaCard key={revista.id} revista={revista} />)}
         </motion.section>
       )}
-
-      <Modal
-        isOpen={showModal}
-        onClose={() => setShowModal(false)}
-        title="Nova revista"
-        description="Crie a estrutura da revista agora; as lições e PDFs poderão ser adicionados em seguida."
-        size="md"
-      >
-        <form onSubmit={handleCreateRevista} className="space-y-5">
-          <div>
-            <span className="mb-2 block text-sm font-medium text-muted-foreground">Capa <span className="text-subtle">(opcional)</span></span>
-            <div className="grid gap-3 sm:grid-cols-[6rem_1fr]">
-              <div className="relative flex aspect-[3/4] items-center justify-center overflow-hidden rounded-xl border border-hairline bg-elevated text-subtle">
-                {novaRevista.capa ? (
-                  <Image src={novaRevista.capa} alt="Prévia da capa" fill unoptimized className="object-cover" />
-                ) : (
-                  <ImageIcon size={22} />
-                )}
-              </div>
-              <label className="group flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-hairline-strong bg-surface px-4 text-center transition-colors hover:border-primary/40 hover:bg-primary-soft">
-                <input type="file" accept="image/*" onChange={handleCapaUpload} className="sr-only" disabled={processingCover} />
-                <Upload size={19} className="mb-2 text-primary" />
-                <span className="text-sm font-medium text-foreground">{processingCover ? 'Processando imagem…' : 'Selecionar uma capa'}</span>
-                <span className="mt-1 text-xs text-subtle">JPG, PNG ou WebP · até 8 MB</span>
-              </label>
-            </div>
-          </div>
-
-          <Input
-            required
-            label="Título"
-            value={novaRevista.titulo}
-            onChange={(event) => setNovaRevista((current) => ({ ...current, titulo: event.target.value }))}
-            placeholder="Ex.: Lições Bíblicas Adultos"
-          />
-          <Input
-            label="Tema"
-            value={novaRevista.tema}
-            onChange={(event) => setNovaRevista((current) => ({ ...current, tema: event.target.value }))}
-            placeholder="Ex.: O verdadeiro Pentecostalismo"
-          />
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              label="Trimestre"
-              value={novaRevista.trimestre}
-              onChange={(event) => setNovaRevista((current) => ({ ...current, trimestre: event.target.value }))}
-              placeholder="3º trimestre"
-            />
-            <Input
-              label="Ano"
-              inputMode="numeric"
-              value={novaRevista.ano}
-              onChange={(event) => setNovaRevista((current) => ({ ...current, ano: event.target.value }))}
-              placeholder="2026"
-            />
-          </div>
-
-          <div className="flex flex-col-reverse gap-2 border-t border-hairline pt-5 sm:flex-row sm:justify-end">
-            <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>
-            <Button type="submit" loading={loading} disabled={processingCover}>
-              {!loading && <Plus size={16} />} {loading ? 'Criando revista…' : 'Criar revista'}
-            </Button>
-          </div>
-        </form>
-      </Modal>
     </WorkspacePage>
   )
 }

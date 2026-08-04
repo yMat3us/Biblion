@@ -10,7 +10,13 @@ export const maxDuration = 60
 export const POST = route(
   async (req: NextRequest) => {
     const input = await parseJson(req, aiSermonSchema)
-    const sermon = await generateSermon(input)
+    const sermon = await generateSermon({
+      tema: input.tema,
+      texto: input.texto,
+      keyword: input.keyword,
+      style: input.style,
+      topicosBase: input.topicosBase,
+    })
     return ok({ sermon })
   },
   { rateLimit: RateLimits.ai },

@@ -4,7 +4,6 @@ import { route } from '@/lib/route'
 import { ApiErrors, created, ok } from '@/lib/http'
 import { RateLimits } from '@/lib/rate-limit'
 import { LicaoService } from '@/lib/services/ebd'
-import { processEBDLessonText } from '@/lib/ai'
 import { isObjectId } from '@/lib/validation'
 
 export const runtime = 'nodejs'
@@ -54,18 +53,17 @@ export const POST = route(
     if (!rawText) throw ApiErrors.badRequest('Não foi possível extrair texto do PDF')
     if (rawText.length > MAX_EXTRACTED_TEXT_CHARS) throw ApiErrors.payloadTooLarge('O texto extraído do PDF é muito grande')
 
-    const structured = await processEBDLessonText(rawText)
     const licao = await LicaoService.create(user.id, {
-      titulo: structured.titulo,
+      titulo: `Lição ${numero || 'Extra'}`,
       numero,
       revistaId,
-      textoBase: structured.textoBase,
-      objetivos: structured.objetivos,
-      introducao: structured.introducao,
-      topicos: JSON.stringify(structured.topicos),
-      conclusao: structured.conclusao,
-      perguntas: JSON.stringify(structured.perguntas),
-      resumo: structured.resumo,
+      textoBase: null,
+      objetivos: null,
+      introducao: null,
+      topicos: '[]',
+      conclusao: null,
+      perguntas: '[]',
+      resumo: null,
       conteudoRaw: rawText,
     })
     return created(licao)

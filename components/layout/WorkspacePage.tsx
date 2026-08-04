@@ -147,7 +147,7 @@ export function EditorActionBar({
   className?: string
 }) {
   return (
-    <div className={cn('editor-action-bar', className)}>
+    <div className={cn('editor-action-bar max-lg:!static max-lg:!mt-8 max-lg:!border-none max-lg:!bg-transparent max-lg:!p-0', className)}>
       {status && <div className="min-w-0 text-xs leading-relaxed text-muted-foreground">{status}</div>}
       <div className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto sm:justify-end">{children}</div>
     </div>
