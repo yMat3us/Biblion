@@ -45,7 +45,7 @@ export const POST = route(
       dias,
       onBatchGenerated: async (batch) => {
         // Salva os dias desse lote no banco
-        await prisma.planDia.createMany({
+        await prisma.planDay.createMany({
           data: batch.map(dia => ({
             planId: plan.id,
             dia: dia.dia,
