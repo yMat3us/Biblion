@@ -150,14 +150,41 @@ export default function TutorPage() {
     }
   }, [messages, isLoading, error])
 
-  const handleSubmit = (event?: React.FormEvent) => {
+  const handleSubmit = async (event?: React.FormEvent) => {
     event?.preventDefault()
     if ((!inputValue.trim() && (!selectedFiles || selectedFiles.length === 0)) || isLoading) return
 
     clearError()
     userScrolledUpRef.current = false // reset scroll lock on new message
-    if (selectedFiles?.length) sendMessage({ text: inputValue.trim(), files: selectedFiles })
-    else sendMessage({ text: inputValue.trim() })
+    
+    let base64Files: string[] = []
+    if (selectedFiles?.length) {
+      base64Files = await Promise.all(
+        Array.from(selectedFiles).map((file) => {
+          return new Promise<string>((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(reader.result as string)
+            reader.onerror = reject
+            reader.readAsDataURL(file)
+          })
+        })
+      )
+    }
+
+    if (base64Files.length) {
+      sendMessage({
+        role: 'user',
+        parts: [
+          ...(inputValue.trim() ? [{ type: 'text', text: inputValue.trim() }] : []),
+          ...base64Files.map((url) => ({ type: 'file', url })),
+        ] as any[],
+      })
+    } else {
+      sendMessage({
+        role: 'user',
+        parts: [{ type: 'text', text: inputValue.trim() }],
+      })
+    }
 
     setInputValue('')
     setSelectedFiles(null)
