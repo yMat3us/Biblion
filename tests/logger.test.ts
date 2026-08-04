@@ -27,7 +27,7 @@ describe('logger — redação de segredos e PII', () => {
   })
 
   it('reduz Error a campos seguros e mascara segredos embutidos na mensagem', () => {
-    const err = Object.assign(new Error('falha token=abcdef123456 bearer XYZ987654321abc'), { code: 'P2002' })
+    const err = Object.assign(new Error('falha token=abcdef123456 bearer XYZ987654321abc'), { code: 'P2002' }) // gitleaks:allow
     const out = redact({ error: err }) as { error: AnyRecord }
 
     expect(out.error.name).toBe('Error')
@@ -40,7 +40,7 @@ describe('logger — redação de segredos e PII', () => {
   it('logger.error emite UMA linha JSON estruturada e redigida', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
-      logger.error('unit_event', { token: 'fake-token-value', keep: 'ok' })
+      logger.error('unit_event', { token: 'fake-token-value', keep: 'ok' }) // gitleaks:allow
       expect(spy).toHaveBeenCalledTimes(1)
       const line = spy.mock.calls[0][0] as string
       expect(line).not.toContain('fake-token-value')

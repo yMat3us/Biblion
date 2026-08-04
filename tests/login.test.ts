@@ -33,7 +33,7 @@ vi.mock('@/lib/rate-limit', () => ({
 import { POST as login } from '@/app/api/auth/login/route'
 
 const BASE = 'https://app.example.com'
-const creds = { username: 'usuario_valido', password: 'Senha-Forte-123' }
+const creds = { username: 'usuario_valido', password: 'Senha-Forte-123' } // gitleaks:allow
 
 function loginRequest(body: object) {
   return new NextRequest(`${BASE}/api/auth/login`, {
