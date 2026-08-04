@@ -21,7 +21,7 @@ function modelId(provider: ModelProvider): string {
   if (provider === 'deepseek') return process.env.DEEPSEEK_MODEL || 'deepseek-chat'
   return provider === 'openai'
     ? process.env.OPENAI_MODEL || 'gpt-4o'
-    : process.env.GOOGLE_AI_MODEL || 'gemini-2.5-flash'
+    : process.env.GOOGLE_AI_MODEL || 'gemini-3.5-flash-lite'
 }
 
 /** Provedor + id do modelo atualmente configurado (para observabilidade/custo). */
@@ -272,7 +272,7 @@ Retorne três referências relevantes, conceitos e uma sugestão de sermão. Nã
 
 export async function moderatePlanTopic(tema: string) {
   const { object } = await measured('plan-moderation', () => generateObject({
-    model: getModel('deepseek'),
+    model: getModel(),
     maxOutputTokens: 1000,
     schema: z.object({
       isAppropriate: z.boolean(),
@@ -305,7 +305,7 @@ export async function generateReadingPlan({ tema, dias }: { tema: string; dias: 
     const endDay = startDay + currentBatchSize - 1
 
     const { object } = await measured(`reading-plan-batch-${index}`, () => generateObject({
-      model: getModel('deepseek'),
+      model: getModel(),
       maxOutputTokens: 8_000,
       schema: z.object({
         titulo: z.string(),
@@ -348,9 +348,9 @@ Regras inegociáveis:
     }[]
   }
 
-  // Como a OpenAI não sofre do gargalo diário estrito de 20 requests do Gemini Free,
-  // podemos rodar as requisições em paralelo (concorrência 4) para o plano ser gerado rápido!
-  const concurrency = 4
+  // Cota do Gemini 3.5 Flash Lite: 15 RPM
+  // Concorrência de 2 com delay de 10s = 12 requests por minuto (perfeitamente seguro)
+  const concurrency = 2
   const successfulResults: { object: PlanBatch; startDay: number }[] = []
   
   for (let i = 0; i < chunkTasks.length; i += concurrency) {
@@ -363,6 +363,10 @@ Regras inegociáveis:
       } else {
         console.error('[AI Plan Generation Error]', res.reason)
       }
+    }
+
+    if (i + concurrency < chunkTasks.length) {
+      await new Promise(resolve => setTimeout(resolve, 10000))
     }
   }
 
