@@ -265,7 +265,7 @@ Retorne três referências relevantes, conceitos e uma sugestão de sermão. Nã
 
 export async function moderatePlanTopic(tema: string) {
   const { object } = await measured('plan-moderation', () => generateObject({
-    model: getModel(),
+    model: getModel('openai'),
     maxOutputTokens: 1000,
     schema: z.object({
       isAppropriate: z.boolean(),
@@ -298,7 +298,7 @@ export async function generateReadingPlan({ tema, dias }: { tema: string; dias: 
     const endDay = startDay + currentBatchSize - 1
 
     const { object } = await measured(`reading-plan-batch-${index}`, () => generateObject({
-      model: getModel(),
+      model: getModel('openai'),
       maxOutputTokens: 8_000,
       schema: z.object({
         titulo: z.string(),
@@ -341,9 +341,9 @@ Regras inegociáveis:
     }[]
   }
 
-  // Reduzido para 1 e delay para 15s para NUNCA ultrapassar 4 requisições por minuto.
-  // Isso resolve definitivamente o "Quota exceeded for metric: generativelanguage... free_tier"
-  const concurrency = 1
+  // Como a OpenAI não sofre do gargalo diário estrito de 20 requests do Gemini Free,
+  // podemos rodar as requisições em paralelo (concorrência 4) para o plano ser gerado rápido!
+  const concurrency = 4
   const successfulResults: { object: PlanBatch; startDay: number }[] = []
   
   for (let i = 0; i < chunkTasks.length; i += concurrency) {
@@ -356,11 +356,6 @@ Regras inegociáveis:
       } else {
         console.error('[AI Plan Generation Error]', res.reason)
       }
-    }
-
-    if (i + concurrency < chunkTasks.length) {
-      // 15 segundos entre requests garante apenas 4 reqs/minuto (muito abaixo do limite de 15 do Google)
-      await new Promise(resolve => setTimeout(resolve, 15000))
     }
   }
 
