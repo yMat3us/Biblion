@@ -463,19 +463,18 @@ export default function LivroPage() {
         description={`${livro.categoria} · ${livro.capitulos} ${livro.capitulos === 1 ? 'capítulo' : 'capítulos'}. Mergulhe nas Escrituras e descubra as verdades eternas reservadas para você hoje.`}
         icon={BookOpen}
         meta={<><Badge variant={isOldTestament ? 'warning' : 'default'}>{isOldTestament ? 'Antiga Aliança' : 'Nova Aliança'}</Badge><Badge variant="outline">Capítulo {capitulo}</Badge></>}
-        actions={
-          <div className="flex w-full items-center justify-between gap-2 sm:w-auto">
-            <Button type="button" variant="outline" className="flex-1 sm:flex-none text-scripture border-scripture/20 hover:border-scripture/50" onClick={() => setIsReadingMode(true)}>
-              Modo Leitura
-            </Button>
-            <Button type="button" variant="outline" className="flex-1 sm:flex-none" onClick={() => setIsVersionModalOpen(true)}>
-              <Languages size={14} className="mr-2 opacity-50 shrink-0" />
-              <span className="truncate">{version}</span>
-              <ChevronDown size={14} className="ml-2 opacity-50 shrink-0" />
-            </Button>
-          </div>
-        }
       />
+
+      <div className="flex w-full max-w-xl mx-auto items-center justify-center gap-4 mb-8 px-4">
+        <Button type="button" variant="outline" className="flex-1 h-12 text-scripture border-scripture/20 hover:border-scripture/50" onClick={() => setIsReadingMode(true)}>
+          Modo Leitura
+        </Button>
+        <Button type="button" variant="outline" className="flex-1 h-12" onClick={() => setIsVersionModalOpen(true)}>
+          <Languages size={14} className="mr-2 opacity-50 shrink-0" />
+          <span className="truncate">{version}</span>
+          <ChevronDown size={14} className="ml-2 opacity-50 shrink-0" />
+        </Button>
+      </div>
       
       <Modal isOpen={isVersionModalOpen} onClose={() => setIsVersionModalOpen(false)} title="Tradução da Bíblia" description="Escolha a versão que você prefere para sua leitura.">
         <div className="grid gap-2 max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar">
