@@ -1,0 +1,16 @@
+title = "Biblion gitleaks config"
+
+# Estende as regras padrão do gitleaks e adiciona uma allowlist específica.
+[extend]
+useDefault = true
+
+# O google-services.json do Firebase contém apenas identificadores de CLIENTE
+# (a "current_key"/API key pública embarca no APK e é restrita por package name +
+# SHA e pelas regras de segurança do Firebase). Não é um segredo de servidor, e o
+# Google documenta que pode ser versionado. Por isso é permitido no scan.
+# Ref.: https://firebase.google.com/docs/projects/api-keys
+[[allowlists]]
+description = "Firebase google-services.json (config de cliente, seguro versionar)"
+paths = [
+  '''android/app/google-services\.json''',
+]
