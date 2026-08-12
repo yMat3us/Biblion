@@ -11,6 +11,7 @@ interface ModalProps {
   description?: string
   children: React.ReactNode
   size?: 'sm' | 'md' | 'lg' | 'xl'
+  position?: 'center' | 'top'
 }
 
 const focusableSelector = [
@@ -22,7 +23,7 @@ const focusableSelector = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',')
 
-export function Modal({ isOpen, onClose, title, description, children, size = 'md' }: ModalProps) {
+export function Modal({ isOpen, onClose, title, description, children, size = 'md', position = 'center' }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
   const onCloseRef = useRef(onClose)
@@ -38,6 +39,7 @@ export function Modal({ isOpen, onClose, title, description, children, size = 'm
 
     previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const previousOverflow = document.body.style.overflow
+    
     document.body.style.overflow = 'hidden'
 
     const focusTimer = window.setTimeout(() => {
@@ -90,11 +92,12 @@ export function Modal({ isOpen, onClose, title, description, children, size = 'm
   }
 
   return (
-    <div className="modal-layer fixed inset-0 z-[120] flex items-center justify-center p-4">
+    <div className={cn("modal-layer fixed inset-0 z-[120] flex justify-center p-4 touch-none overscroll-none", position === 'top' ? 'items-start pt-[12vh]' : 'items-center')}>
       <div
         aria-hidden="true"
-        className="absolute inset-0 bg-black/72 backdrop-blur-md"
+        className="absolute inset-0 bg-black/72 backdrop-blur-md touch-none"
         onMouseDown={onClose}
+        onTouchMove={(e) => e.preventDefault()}
       />
       <div
         ref={dialogRef}
@@ -124,7 +127,7 @@ export function Modal({ isOpen, onClose, title, description, children, size = 'm
             <X size={18} />
           </button>
         </div>
-        <div className="custom-scrollbar overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6">
+        <div className="custom-scrollbar overflow-y-auto overscroll-contain p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6">
           {children}
         </div>
       </div>

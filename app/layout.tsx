@@ -7,6 +7,7 @@ import { FeedbackProvider } from '@/components/ui/Feedback'
 import { AmbientBackground } from '@/components/ui/AmbientBackground'
 import { ServiceWorkerRegistrar } from '@/components/pwa/ServiceWorkerRegistrar'
 import { MobileAppProvider } from '@/components/mobile/MobileAppProvider'
+import { PushRegistration } from '@/components/mobile/PushRegistration'
 import { initServerTaint } from '@/lib/taint'
 
 // Marca segredos de ambiente como não-serializáveis ao client (defesa em profundidade).
@@ -92,6 +93,7 @@ export default async function RootLayout({
         <ServiceWorkerRegistrar />
         <FeedbackProvider>
           <MobileAppProvider />
+          <PushRegistration />
           {children}
         </FeedbackProvider>
       </body>

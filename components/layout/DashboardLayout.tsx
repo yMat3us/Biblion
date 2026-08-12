@@ -26,6 +26,8 @@ import {
 import { cn } from '@/lib/utils'
 import { Sidebar } from './Sidebar'
 import { NotificationBell } from './NotificationBell'
+import { AnalysisProgressProvider } from '@/components/analysis/AnalysisProgressProvider'
+import { AnalysisProgressDock } from '@/components/analysis/AnalysisProgressDock'
 import { accentFor, userInitial, type CurrentUserView } from '@/types/auth'
 
 const routeMeta = [
@@ -189,7 +191,7 @@ export function DashboardLayout({
   }, [isDesktop, isMobileMenuOpen, pathname])
 
   return (
-    <>
+    <AnalysisProgressProvider>
       <style suppressHydrationWarning>{`
         :root {
           --color-primary: ${accent.color};
@@ -286,6 +288,7 @@ export function DashboardLayout({
         )}
       </div>
     </div>
-    </>
+      <AnalysisProgressDock />
+    </AnalysisProgressProvider>
   )
 }

@@ -39,4 +39,6 @@
     </application>
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Notificações de progresso das análises (Android 13+ exige em runtime). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 </manifest>

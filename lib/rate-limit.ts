@@ -103,6 +103,10 @@ export const RateLimits = {
   standard: { limit: 120, windowMs: 60_000 },
   ai: { limit: 20, windowMs: 60_000, scope: 'ai' },
   aiUpload: { limit: 10, windowMs: 60_000, scope: 'ai' },
+  // Leitura de status/progresso de tarefas de IA: consulta barata (só lê um doc)
+  // feita por polling em tempo real. Teto alto e escopo próprio para não gastar
+  // o orçamento de geração de IA nem barrar o acompanhamento ao vivo.
+  aiStatus: { limit: 300, windowMs: 60_000, scope: 'ai-status' },
   auth: { limit: 8, windowMs: 60_000, scope: 'auth' },
   // Escritas sociais (solicitar/responder/remover amizade, bloquear, iniciar
   // conversa): frequência legítima baixa; teto apertado para conter spam.

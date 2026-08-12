@@ -72,9 +72,49 @@ export const LIVROS_BIBLIA = [
 export const LIVROS_AT = LIVROS_BIBLIA.filter(l => l.testamento === 'AT')
 export const LIVROS_NT = LIVROS_BIBLIA.filter(l => l.testamento === 'NT')
 
+/** Normaliza para comparação: minúsculas, sem acentos, espaços colapsados, sem ponto final. */
+function normalizeBookName(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\.$/, '')
+}
+
+/**
+ * Apelidos/variantes comuns que a IA costuma produzir (singular, sinônimos),
+ * mapeados para o nome canônico. Chaves já normalizadas (sem acento, minúsculas).
+ */
+const BOOK_ALIASES: Record<string, string> = {
+  salmo: 'Salmos',
+  cantares: 'Cânticos',
+  canticos: 'Cânticos',
+  cantico: 'Cânticos',
+  'cantico dos canticos': 'Cânticos',
+  'cantares de salomao': 'Cânticos',
+  eclesiaste: 'Eclesiastes',
+  revelacao: 'Apocalipse',
+  apocalipsis: 'Apocalipse',
+  filemon: 'Filemom',
+}
+
 export function getLivro(nome: string) {
-  return LIVROS_BIBLIA.find(l =>
-    l.nome.toLowerCase() === nome.toLowerCase() ||
-    l.abreviacao.toLowerCase() === nome.toLowerCase()
+  const raw = nome.trim().toLowerCase()
+
+  // 1) Match exato (case-insensitive, sensível a acento) — preserva desambiguações
+  //    como "Jo" (abreviação de João) vs "Jó" (nome).
+  const exact = LIVROS_BIBLIA.find(
+    (l) => l.nome.toLowerCase() === raw || l.abreviacao.toLowerCase() === raw,
+  )
+  if (exact) return exact
+
+  // 2) Fallback tolerante: sem acentos + apelidos comuns.
+  const query = normalizeBookName(nome)
+  const canonical = BOOK_ALIASES[query] ?? nome
+  const target = normalizeBookName(canonical)
+  return LIVROS_BIBLIA.find(
+    (l) => normalizeBookName(l.nome) === target || normalizeBookName(l.abreviacao) === target,
   )
 }

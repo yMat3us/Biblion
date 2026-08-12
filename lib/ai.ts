@@ -1,24 +1,52 @@
-import { generateObject, generateText } from 'ai'
-import { openai } from '@ai-sdk/openai'
+import { generateObject as originalGenerateObject, generateText } from 'ai'
+import { openai, createOpenAI } from '@ai-sdk/openai'
+import { createGroq } from '@ai-sdk/groq'
 import { google } from '@ai-sdk/google'
 import { deepseek } from '@ai-sdk/deepseek'
 import { z } from 'zod'
 import { ApiErrors } from '@/lib/http'
 import { logAiUsage, startTimer, type RawUsage } from '@/lib/observability'
 
-type ModelProvider = 'openai' | 'gemini' | 'deepseek'
+async function generateObject<T>(args: any): Promise<any> {
+  const isGroq = configuredProvider() === 'groq';
+  let system = args.system;
+  let prompt = args.prompt;
+  
+  if (isGroq) {
+    if (system !== undefined) {
+      system += ' Please respond in JSON format.';
+    } else if (prompt !== undefined) {
+      prompt += ' Please respond in JSON format.';
+    } else if (args.messages && args.messages.length > 0) {
+      args.messages[0].content += ' Please respond in JSON format.';
+    } else {
+      system = 'Please respond in JSON format.';
+    }
+  }
+
+  return originalGenerateObject<T>({
+    ...args,
+    ...(system !== undefined && { system }),
+    ...(prompt !== undefined && { prompt }),
+    mode: isGroq ? 'json' : args.mode,
+  })
+}
+
+type ModelProvider = 'openai' | 'gemini' | 'deepseek' | 'groq'
 
 function configuredProvider(requested?: string): ModelProvider {
   const preferred = requested ?? process.env.AI_PROVIDER
-  if (preferred === 'openai' || preferred === 'gemini' || preferred === 'deepseek') return preferred
+  if (preferred === 'openai' || preferred === 'gemini' || preferred === 'deepseek' || preferred === 'groq') return preferred as ModelProvider
   if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) return 'gemini'
   if (process.env.DEEPSEEK_API_KEY) return 'deepseek'
+  if (process.env.GROQ_API_KEY) return 'groq'
   if (process.env.OPENAI_API_KEY) return 'openai'
   throw ApiErrors.serviceUnavailable('Nenhum provedor de IA está configurado')
 }
 
 function modelId(provider: ModelProvider): string {
   if (provider === 'deepseek') return process.env.DEEPSEEK_MODEL || 'deepseek-chat'
+  if (provider === 'groq') return process.env.GROQ_MODEL || 'openai/gpt-oss-20b'
   return provider === 'openai'
     ? process.env.OPENAI_MODEL || 'gpt-4o'
     : process.env.GOOGLE_AI_MODEL || 'gemini-3.5-flash-lite'
@@ -39,6 +67,43 @@ export function getModel(modelType?: string) {
   if (provider === 'openai') {
     if (!process.env.OPENAI_API_KEY) throw ApiErrors.serviceUnavailable('OpenAI não está configurada')
     return openai(modelId('openai'))
+  }
+  if (provider === 'groq') {
+    if (!process.env.GROQ_API_KEY) throw ApiErrors.serviceUnavailable('Groq não está configurado')
+    const groqOpenAIProvider = createOpenAI({
+      baseURL: 'https://api.groq.com/openai/v1',
+      apiKey: process.env.GROQ_API_KEY,
+      fetch: async (url: any, init: any) => {
+        if (init && init.body) {
+          try {
+            let bodyStr = '';
+            if (typeof init.body === 'string') {
+              bodyStr = init.body;
+            } else if (init.body instanceof Uint8Array || Buffer.isBuffer(init.body)) {
+              bodyStr = new TextDecoder().decode(init.body);
+            }
+            if (bodyStr) {
+              const body = JSON.parse(bodyStr);
+              if (body.response_format && body.response_format.type === 'json_schema') {
+                const schema = body.response_format.json_schema.schema;
+                body.response_format = { type: 'json_object' };
+                if (schema && body.messages && body.messages.length > 0) {
+                  const lastMessage = body.messages[body.messages.length - 1];
+                  if (typeof lastMessage.content === 'string') {
+                    lastMessage.content += `\n\nReturn EXACTLY a JSON object matching this schema. Do not include markdown blocks or any other text. Schema: ${JSON.stringify(schema)}`;
+                  }
+                }
+                init.body = JSON.stringify(body);
+              }
+            }
+          } catch (e) {
+            console.error('Interceptor error:', e);
+          }
+        }
+        return fetch(url, init)
+      }
+    })
+    return groqOpenAIProvider.chat(modelId('groq'), { structuredOutputs: false })
   }
   if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
     throw ApiErrors.serviceUnavailable('Google Gemini não está configurado')
@@ -137,70 +202,312 @@ Crie introdução, três ou quatro tópicos com referências cruzadas, conclusã
   return object
 }
 
+
 export async function generateBibleInsights(verseRef: string, verseText: string) {
-  const { object } = await generateObject({
-    model: getModel(),
-    maxOutputTokens: 8_000,
-    schema: z.object({
-      exegese: z.string(),
-      hermeneutica: z.string(),
-      aplicacao: z.string(),
-      homiletica: z.string(),
-      versiculosRelacionados: z.array(z.string()),
-      comparacaoVersoes: z.array(z.object({ versao: z.string(), texto: z.string() })),
-    }),
-    prompt: `Analise o versículo com rigor teológico. ${UNTRUSTED_DATA_RULE}
-Se não tiver segurança sobre uma tradução literal, informe a limitação em vez de fabricar o texto. Diferencie interpretação de fato histórico.
-<dados>Referência: ${promptData(verseRef, 200)}\nTexto: ${promptData(verseText, 5_000)}</dados>
-Produza, em até um parágrafo cada, exegese, hermenêutica, aplicação e insight homilético, além de referências relacionadas e comparação responsável de versões.`,
-  })
-  return object
+  const model = getModel()
+  const context = `<dados>
+Referência: ${promptData(verseRef, 200)}
+Texto: ${promptData(verseText, 5_000)}
+</dados>`
+  const globalRules = `Você trabalha em um sistema acadêmico de análise bíblica.
+Prioridades: 1. fidelidade ao texto; 2. precisão linguística; 3. contexto; 4. evidência histórica; 5. rigor exegético; 6. honestidade epistemológica; 7. clareza; 8. profundidade.
+NUNCA invente grego, hebraico, aramaico, variantes, ou dados históricos.
+REGRA HERMENÊUTICA GLOBAL: TEXTO -> LINGUÍSTICA -> CONTEXTO HISTÓRICO -> INTERTEXTUALIDADE -> EXEGESE -> TEOLOGIA BÍBLICA -> APLICAÇÃO.
+REGRAS ESPECÍFICAS:
+A - Tempo verbal não prova sozinho uma doutrina (ex: imperfeito não significa existência eterna sem começo).
+B - Preposições não são doutrinas (ex: pros não significa face a face).
+C - Substantivo anartro não significa qualitativo/natureza automaticamente.
+D - Não atribua posições anacrônicas sem fonte primária.
+E - Não classifique conceitos teológicos automaticamente como personificação literária.
+${UNTRUSTED_DATA_RULE}`
+
+  const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+  async function safeGenerateObject(args: any): Promise<any> {
+    await delay(4500); // Garante 4.5s entre chamadas para não estourar os 15 RPM
+    return generateObject(args);
+  }
+
+  const issueTypes = [
+    'MORPHOLOGY_OVERCLAIM', 'LEXICAL_OVERCLAIM', 'SYNTACTIC_ERROR', 
+    'THEOLOGICAL_LEAP', 'HISTORICAL_ATTRIBUTION_UNSOURCED', 
+    'INTERPRETIVE_OVERSTATEMENT', 'INTERTEXTUALITY_OVERCLAIM', 
+    'CONFESSIONAL_BIAS', 'TRANSLATION_ERROR', 'COLWELL_REVERSE_INFERENCE',
+    'CROSS_SECTION_CONTRADICTION', 'LOGICAL_FALLACY'
+  ] as const;
+
+  const moduleAuditorSchema = z.object({
+    approved: z.boolean(),
+    issues: z.array(z.object({
+      severity: z.enum(['HIGH', 'MEDIUM', 'LOW', 'CRITICAL']),
+      type: z.enum(issueTypes),
+      problem: z.string(),
+      correctionInstruction: z.string()
+    }))
+  });
+
+  const globalAuditorSchema = z.object({
+    approved: z.boolean(),
+    issues: z.array(z.object({
+      moduleNumber: z.number(),
+      severity: z.enum(['HIGH', 'MEDIUM', 'LOW', 'CRITICAL']),
+      type: z.enum(issueTypes),
+      problem: z.string(),
+      correctionInstruction: z.string()
+    }))
+  });
+
+  async function runModuleAudit(moduleNumber: number, data: any) {
+    console.log(`[Pipeline] MODULE_AUDIT_STARTED for Module ${moduleNumber}`);
+    const { object } = await safeGenerateObject({
+      model, maxOutputTokens: 8192, schema: moduleAuditorSchema,
+      prompt: `Você é o Auditor Acadêmico de Módulo. Revise a análise deste módulo.
+Regra rígida: Corrija falhas lógicas e estruturais (maus argumentos) sem forçar conclusões teológicas.
+Procure violações como: COLWELL_REVERSE_INFERENCE, LEXICAL_OVERCLAIM, salto teológico a partir de morfologia, etc.
+DADOS: ${JSON.stringify(data)}`
+    });
+    console.log(`[Pipeline] MODULE_AUDIT_COMPLETE for Module ${moduleNumber}`, JSON.stringify((object as any).issues));
+    return object as any;
+  }
+
+  async function runGlobalAudit(data: any) {
+    console.log('[Pipeline] GLOBAL_AUDIT_STARTED');
+    const { object } = await safeGenerateObject({
+      model, maxOutputTokens: 8192, schema: globalAuditorSchema,
+      prompt: `Você é o Auditor Acadêmico Independente (Global). Revise toda a análise para inconsistências cruzadas e falácias globais.
+Regra rígida: Corrija falhas lógicas e estruturais (maus argumentos) sem forçar conclusões teológicas.
+Procure violações como: COLWELL_REVERSE_INFERENCE, LEXICAL_OVERCLAIM, CROSS_SECTION_CONTRADICTION, LOGICAL_FALLACY, etc.
+DADOS: ${JSON.stringify(data)}`
+    });
+    console.log('[Pipeline] GLOBAL_AUDIT_COMPLETE', JSON.stringify((object as any).issues));
+    return object as any;
+  }
+
+  async function callModule<T>(moduleNumber: number, moduleName: string, schema: z.ZodType<T>, prompt: string, previousContext: any = {}, globalCorrection?: string): Promise<T> {
+    let attempts = 0;
+    let currentCorrection = globalCorrection || '';
+    let lastObject: any = null;
+
+    while (attempts < 3) {
+      try {
+        const { object } = await safeGenerateObject({
+          model, maxOutputTokens: 8192, schema,
+          prompt: `${globalRules}\n\nOBJETIVO: ${moduleName}\n${context}\nContexto Anterior: ${JSON.stringify(previousContext)}\n\n${prompt}${currentCorrection ? '\n\nCORREÇÃO OBRIGATÓRIA DA AUDITORIA: ' + currentCorrection : ''}`
+        });
+        
+        lastObject = object;
+        const localAudit = await runModuleAudit(moduleNumber, object);
+        if (localAudit.approved) {
+          return object as T;
+        } else {
+          currentCorrection = (currentCorrection ? currentCorrection + ' | ' : '') + localAudit.issues.map((i: any) => i.correctionInstruction).join(' | ');
+          console.log(`[Pipeline] MODULE_AUDIT_RETRY for Module ${moduleNumber}. Attempt ${attempts + 1}`);
+        }
+      } catch (e) {
+        console.error(`[Pipeline] MODULE_ERROR for Module ${moduleNumber}. Attempt ${attempts + 1}`, e);
+      }
+      attempts++;
+    }
+    if (!lastObject) throw new Error(`Module ${moduleNumber} failed after 3 attempts`);
+    return lastObject as T;
+  }
+
+  const module1Schema = z.object({ textoVersiculo: z.string(), comparacaoVersoes: z.string(), contextoImediato: z.string(), sentidoPrincipal: z.string() });
+  const module2Schema = z.object({ textoOriginal: z.string(), analiseLexical: z.string(), gramaticaMorfologia: z.string(), sintaxe: z.string(), traduzLiteral: z.string() });
+  const module3Schema = z.object({ exegeseDetalhada: z.string(), palavrasChave: z.string(), figurasLinguagem: z.string(), dificuldades: z.string() });
+  const module4Schema = z.object({ variantesTextuais: z.string(), referenciasCruzadas: z.string(), intertextualidade: z.string() });
+  const module5Schema = z.object({ contextoHistorico: z.string(), usoHistoriaIgreja: z.string() });
+  const module6Schema = z.object({ interpretacoesPrincipais: z.string(), avaliacaoExegetica: z.string(), errosComuns: z.string() });
+  const module7Schema = z.object({ implicacoesTeologicas: z.string(), relacaoCristo: z.string() });
+  const module8Schema = z.object({ aplicacao: z.string(), resumoExegetico: z.string() });
+
+  console.log('[Pipeline] GENERATION_STARTED');
+
+  let step1 = await callModule(1, 'MODULO 1 - Texto', module1Schema, 'Produza Texto do versículo, Comparação, Contexto, Sentido principal.');
+  await delay(10000);
+  let step2 = await callModule(2, 'MODULO 2 - Linguistica', module2Schema, 'Produza Texto original, Análise lexical, Gramática, Sintaxe, Tradução literal.');
+  await delay(10000);
+  let step4 = await callModule(4, 'MODULO 4 - Textos', module4Schema, 'Produza Variantes textuais, Referências cruzadas, Intertextualidade.');
+  await delay(10000);
+  let step5 = await callModule(5, 'MODULO 5 - Historico', module5Schema, 'Produza Contexto histórico, Uso na história da Igreja.');
+  await delay(10000);
+  
+  let step3 = await callModule(3, 'MODULO 3 - Exegese', module3Schema, 'Produza Exegese detalhada, Palavras-chave, Figuras de linguagem, Dificuldades.', { step1, step2 });
+  await delay(10000);
+  let step6 = await callModule(6, 'MODULO 6 - Interpretacao', module6Schema, 'Produza Interpretações principais, Avaliação exegética, Erros comuns.', { step3, step4, step5 });
+  await delay(10000);
+  let step7 = await callModule(7, 'MODULO 7 - Teologia', module7Schema, 'Produza Implicações teológicas, Relação com Cristo.', { step6 });
+  await delay(10000);
+  let step8 = await callModule(8, 'MODULO 8 - Sintese', module8Schema, 'Produza Aplicação, Resumo exegético.', { step7 });
+  await delay(10000);
+
+  console.log('[Pipeline] GENERATION_COMPLETE');
+  console.log('[Pipeline] SCHEMA_VALIDATION_COMPLETE');
+
+  let fullData = { step1, step2, step3, step4, step5, step6, step7, step8 };
+  let auditResult = await runGlobalAudit(fullData);
+  
+  let retryCount = 0;
+  while (!auditResult.approved && retryCount < 2) {
+    console.log('[Pipeline] ISSUES_FOUND, GLOBAL_CORRECTION_STARTED. Attempt:', retryCount + 1);
+    
+    // Agrupa issues por modulo
+    const issuesByModule = auditResult.issues.reduce((acc: any, issue: any) => {
+      if (!acc[issue.moduleNumber]) acc[issue.moduleNumber] = [];
+      acc[issue.moduleNumber].push(issue);
+      return acc;
+    }, {} as Record<number, any[]>);
+
+    // Corrige os modulos afetados
+    if (issuesByModule[1]) { step1 = await callModule(1, 'MODULO 1 - Texto', module1Schema, 'Produza...', {}, issuesByModule[1].map((i: any) => i.correctionInstruction).join(' | ')); await delay(8000); }
+    if (issuesByModule[2]) { step2 = await callModule(2, 'MODULO 2 - Linguistica', module2Schema, 'Produza...', {}, issuesByModule[2].map((i: any) => i.correctionInstruction).join(' | ')); await delay(8000); }
+    if (issuesByModule[3]) { step3 = await callModule(3, 'MODULO 3 - Exegese', module3Schema, 'Produza...', {step1, step2}, issuesByModule[3].map((i: any) => i.correctionInstruction).join(' | ')); await delay(8000); }
+    if (issuesByModule[4]) { step4 = await callModule(4, 'MODULO 4 - Textos', module4Schema, 'Produza...', {}, issuesByModule[4].map((i: any) => i.correctionInstruction).join(' | ')); await delay(8000); }
+    if (issuesByModule[5]) { step5 = await callModule(5, 'MODULO 5 - Historico', module5Schema, 'Produza...', {}, issuesByModule[5].map((i: any) => i.correctionInstruction).join(' | ')); await delay(8000); }
+    if (issuesByModule[6]) { step6 = await callModule(6, 'MODULO 6 - Interpretacao', module6Schema, 'Produza...', {step3, step4, step5}, issuesByModule[6].map((i: any) => i.correctionInstruction).join(' | ')); await delay(8000); }
+    if (issuesByModule[7]) { step7 = await callModule(7, 'MODULO 7 - Teologia', module7Schema, 'Produza...', {step6}, issuesByModule[7].map((i: any) => i.correctionInstruction).join(' | ')); await delay(8000); }
+    if (issuesByModule[8]) { step8 = await callModule(8, 'MODULO 8 - Sintese', module8Schema, 'Produza...', {step7}, issuesByModule[8].map((i: any) => i.correctionInstruction).join(' | ')); await delay(8000); }
+
+    console.log('[Pipeline] GLOBAL_CORRECTION_COMPLETE');
+    console.log('[Pipeline] REAUDIT_STARTED');
+    fullData = { step1, step2, step3, step4, step5, step6, step7, step8 };
+    auditResult = await runGlobalAudit(fullData);
+    console.log('[Pipeline] REAUDIT_COMPLETE');
+    retryCount++;
+  }
+
+  if (auditResult.approved) {
+    console.log('[Pipeline] APPROVED');
+    return { ...fullData.step1, ...fullData.step2, ...fullData.step3, ...fullData.step4, ...fullData.step5, ...fullData.step6, ...fullData.step7, ...fullData.step8, auditoria: "Status: APPROVED" };
+  } else {
+    console.log('[Pipeline] FAILED - AUDIT REJECTED');
+    return { ...fullData.step1, ...fullData.step2, ...fullData.step3, ...fullData.step4, ...fullData.step5, ...fullData.step6, ...fullData.step7, ...fullData.step8, auditoria: "Status: FAILED_AUDIT\nIssues: " + JSON.stringify(auditResult.issues) };
+  }
 }
 
 export async function generateChapterInsights(chapterRef: string, chapterText: string) {
-  const { object } = await generateObject({
-    model: getModel(),
-    maxOutputTokens: 8_000,
-    schema: z.object({
-      temaGeral: z.string(),
-      contextoHistoricoCultural: z.string(),
-      cenario: z.string(),
-      exegese: z.string(),
-      hermeneutica: z.string(),
-      referenciasMessianicasEscatologicas: z.string(),
-      tradicaoCrista: z.string(),
-      visoesTeologicas: z.string(),
-      aplicacao: z.string(),
-      homiletica: z.string(),
-      curiosidades: z.string(),
-    }),
-    prompt: `Atue como exégeta e teólogo. ${UNTRUSTED_DATA_RULE}
-Analise o capítulo de forma acadêmica e acessível, diferenciando consenso, tradição interpretativa e posições confessionais. Não invente fatos arqueológicos ou citações.
-<dados>Referência: ${promptData(chapterRef, 200)}\nCapítulo: ${promptData(chapterText, 50_000)}</dados>
-Inclua tema, contexto, cenário, exegese, hermenêutica, referências messiânicas/escatológicas, tradição cristã, visões arminiana/calvinista/luterana, aplicação, esboço homilético e curiosidades verificáveis.`,
-  })
-  return object
+  const model = getModel()
+  const context = `<dados>Referência: ${promptData(chapterRef, 200)}\nCapítulo: ${promptData(chapterText, 50_000)}</dados>`
+  const globalRules = `Analise o capítulo de forma acadêmica, profunda e detalhada. A base teológica da sua análise deve ser a doutrina pentecostal clássica de vertente Armínio-Wesleyana. ${UNTRUSTED_DATA_RULE}`
+
+  const [chunk1, chunk2, chunk3] = await Promise.all([
+    generateObject({
+      model, maxOutputTokens: 8192,
+      schema: z.object({
+        visaoGeral: z.string(),
+        contextoImediato: z.string(),
+        estrutura: z.string(),
+        fluxoArgumentativo: z.string(),
+      }),
+      prompt: `${globalRules}\n\nOBJETIVO: Análise de Capítulo (Parte 1)\n${context}\n\nProduza: 1. Visão geral 2. Contexto imediato 3. Estrutura 4. Fluxo argumentativo. Use Markdown.`
+    }).then(r => r.object),
+    
+    generateObject({
+      model, maxOutputTokens: 8192,
+      schema: z.object({
+        analiseSecoes: z.string(),
+        temasPrincipais: z.string(),
+        teologiaCapitulo: z.string(),
+        conexoesBiblicas: z.string(),
+      }),
+      prompt: `${globalRules}\n\nOBJETIVO: Análise de Capítulo (Parte 2)\n${context}\n\nProduza: 5. Análise das seções 6. Temas principais 7. Teologia do capítulo 8. Conexões bíblicas. Use Markdown.`
+    }).then(r => r.object),
+
+    generateObject({
+      model, maxOutputTokens: 8192,
+      schema: z.object({
+        pontosTensao: z.string(),
+        principaisInterpretacoes: z.string(),
+        mensagemCentral: z.string(),
+        aplicacoes: z.string(),
+      }),
+      prompt: `${globalRules}\n\nOBJETIVO: Análise de Capítulo (Parte 3)\n${context}\n\nProduza: 9. Pontos de tensão e dificuldades 10. Principais interpretações 11. Mensagem central 12. Aplicações derivadas. Use Markdown.`
+    }).then(r => r.object)
+  ])
+
+  return { ...chunk1, ...chunk2, ...chunk3 }
 }
 
 export async function generateBookInsights(bookName: string) {
-  const { object } = await generateObject({
-    model: getModel(),
-    maxOutputTokens: 8_000,
-    schema: z.object({
-      autor: z.string(),
-      dataELocal: z.string(),
-      proposito: z.string(),
-      publicoAlvo: z.string(),
-      contextoHistorico: z.string(),
-      temasPrincipais: z.string(),
-      esboco: z.string(),
-      cristocentrismo: z.string(),
-    }),
-    prompt: `Forneça introdução teológica e histórica responsável para o livro bíblico indicado em <dados>. ${UNTRUSTED_DATA_RULE}
-Quando autoria ou data forem debatidas, apresente as principais posições sem afirmar certeza inexistente. Inclua autoria, data/local, propósito, público, contexto, temas, esboço e cristocentrismo.
-<dados>${promptData(bookName, 100)}</dados>`,
-  })
-  return object
+  const model = getModel()
+  const context = `<dados>${promptData(bookName, 100)}</dados>`
+  const globalRules = `Forneça introdução teológica e histórica responsável e profunda para o livro bíblico indicado em <dados>. A base teológica da sua análise deve ser a doutrina pentecostal clássica de vertente Armínio-Wesleyana. ${UNTRUSTED_DATA_RULE}`
+
+  const [chunk1, chunk2, chunk3, chunk4, chunk5, chunk6] = await Promise.all([
+    generateObject({
+      model, maxOutputTokens: 8192,
+      schema: z.object({
+        visaoGeral: z.string(),
+        autoria: z.string(),
+        dataELocal: z.string(),
+        destinatarios: z.string(),
+        contextoHistorico: z.string(),
+      }),
+      prompt: `${globalRules}\n\nOBJETIVO: Análise de Livro (Parte 1)\n${context}\n\nProduza: 1. Visão geral 2. Autoria 3. Data e local 4. Destinatários 5. Contexto histórico. Use Markdown.`
+    }).then(r => r.object),
+    
+    generateObject({
+      model, maxOutputTokens: 8192,
+      schema: z.object({
+        contextoCultural: z.string(),
+        contextoGeografico: z.string(),
+        ocasiao: z.string(),
+        proposito: z.string(),
+        generoLiterario: z.string(),
+      }),
+      prompt: `${globalRules}\n\nOBJETIVO: Análise de Livro (Parte 2)\n${context}\n\nProduza: 6. Contexto cultural 7. Contexto geográfico 8. Ocasião da escrita 9. Propósito do autor 10. Gênero literário. Use Markdown.`
+    }).then(r => r.object),
+
+    generateObject({
+      model, maxOutputTokens: 8192,
+      schema: z.object({
+        estrutura: z.string(),
+        fluxoLiterario: z.string(),
+        temaCentral: z.string(),
+        temasPrincipais: z.string(),
+        teologia: z.string(),
+      }),
+      prompt: `${globalRules}\n\nOBJETIVO: Análise de Livro (Parte 3)\n${context}\n\nProduza: 11. Estrutura do livro 12. Fluxo literário 13. Tema central 14. Temas principais 15. Teologia do livro. Use Markdown.`
+    }).then(r => r.object),
+
+    generateObject({
+      model, maxOutputTokens: 8192,
+      schema: z.object({
+        cristologia: z.string(),
+        lugarHistoriaRedencao: z.string(),
+        relacaoOutrosLivros: z.string(),
+        usoAntigoTestamento: z.string(),
+        palavrasConceitos: z.string(),
+      }),
+      prompt: `${globalRules}\n\nOBJETIVO: Análise de Livro (Parte 4)\n${context}\n\nProduza: 16. Cristologia 17. Lugar na história da redenção 18. Relação com outros livros 19. Uso do Antigo Testamento 20. Palavras e conceitos recorrentes. Use Markdown.`
+    }).then(r => r.object),
+
+    generateObject({
+      model, maxOutputTokens: 8192,
+      schema: z.object({
+        personagensPrincipais: z.string(),
+        cronologia: z.string(),
+        principaisLugares: z.string(),
+        questoesInterpretativas: z.string(),
+        debatesTeologicos: z.string(),
+      }),
+      prompt: `${globalRules}\n\nOBJETIVO: Análise de Livro (Parte 5)\n${context}\n\nProduza: 21. Personagens principais 22. Cronologia 23. Principais lugares 24. Questões interpretativas 25. Principais debates teológicos. Use Markdown.`
+    }).then(r => r.object),
+
+    generateObject({
+      model, maxOutputTokens: 8192,
+      schema: z.object({
+        historiaInterpretacao: z.string(),
+        canonicidade: z.string(),
+        manuscritos: z.string(),
+        contribuicaoUnica: z.string(),
+        conclusaoTeologica: z.string(),
+      }),
+      prompt: `${globalRules}\n\nOBJETIVO: Análise de Livro (Parte 6)\n${context}\n\nProduza: 26. História da interpretação 27. Canonicidade 28. Manuscritos e transmissão textual 29. Contribuição única 30. Conclusão teológica. Use Markdown.`
+    }).then(r => r.object)
+  ])
+
+  return { ...chunk1, ...chunk2, ...chunk3, ...chunk4, ...chunk5, ...chunk6 }
 }
 
 export async function deepenTheology({ doutrina, topico, conteudo }: { doutrina: string; topico: string; conteudo: string }) {
@@ -273,7 +580,7 @@ Retorne três referências relevantes, conceitos e uma sugestão de sermão. Nã
 export async function moderatePlanTopic(tema: string) {
   const { object } = await measured('plan-moderation', () => generateObject({
     model: getModel(),
-    maxOutputTokens: 1000,
+    maxOutputTokens: 8192,
     schema: z.object({
       isAppropriate: z.boolean(),
       reason: z.string(),

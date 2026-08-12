@@ -1,23 +1,33 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { Markdown } from '@/components/ui/Markdown'
 import {
   BookMarked,
   BookOpen,
+  BookText,
   BrainCircuit,
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Clock,
+  Cross,
+  FileText,
+  Landmark,
   Languages,
   LibraryBig,
+  Link2,
   ListFilter,
   Loader2,
+  Microscope,
   Search,
+  ShieldCheck,
+  ShieldAlert,
   Sparkles,
+  MoreHorizontal,
 } from 'lucide-react'
 import { getLivro, LIVROS_BIBLIA } from '@/data/livros'
 import { DetailHeader, SectionHeading, WorkspacePage } from '@/components/layout/WorkspacePage'
@@ -27,11 +37,27 @@ import { Button, buttonStyles } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Input } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Feedback'
+import { WordAnalysis } from '@/components/ui/WordAnalysis'
+import { StudySection } from '@/components/ui/StudySection'
+import { CrossReferences } from '@/components/ui/CrossReferences'
+import { VersionComparison } from '@/components/ui/VersionComparison'
+import { ProgressBar } from '@/components/ui/ProgressBar'
+import { useAnalysisProgress } from '@/components/analysis/AnalysisProgressProvider'
 import { cn } from '@/lib/utils'
+import type { VerseAnalysisResult, VersionComparisonEntry } from '@/lib/ai-audit-types'
 
 interface BibleVerse {
   verse: number
   text: string
+}
+
+interface VerseProgressState {
+  progress: number
+  statusMessage: string
+  waitingRateLimit: boolean
+  currentModule?: number | null
+  totalModules?: number | null
+  status: 'generating' | 'error'
 }
 
 interface VersionComparison {
@@ -40,37 +66,79 @@ interface VersionComparison {
 }
 
 interface VerseInsights {
-  exegese: string
-  hermeneutica: string
-  aplicacao: string
-  homiletica: string
-  versiculosRelacionados: string[]
-  comparacaoVersoes: VersionComparison[]
+  textoVersiculo: string;
+  comparacaoVersoes: string;
+  contextoImediato: string;
+  sentidoPrincipal: string;
+  exegeseDetalhada: string;
+  textoOriginal: string;
+  analiseLexical: string;
+  gramaticaMorfologia: string;
+  sintaxe: string;
+  variantesTextuais: string;
+  traduzLiteral: string;
+  palavrasChave: string;
+  referenciasCruzadas: string;
+  intertextualidade: string;
+  contextoHistorico: string;
+  figurasLinguagem: string;
+  dificuldades: string;
+  interpretacoesPrincipais: string;
+  avaliacaoExegetica: string;
+  implicacoesTeologicas: string;
+  relacaoCristo: string;
+  usoHistoriaIgreja: string;
+  errosComuns: string;
+  aplicacao: string;
+  resumoExegetico: string;
 }
 
 interface ChapterInsights {
-  temaGeral: string
-  contextoHistoricoCultural: string
-  cenario: string
-  exegese: string
-  hermeneutica: string
-  referenciasMessianicasEscatologicas: string
-  tradicaoCrista: string
-  visoesTeologicas: string
-  aplicacao: string
-  homiletica: string
-  curiosidades: string
+  visaoGeral: string;
+  contextoImediato: string;
+  estrutura: string;
+  fluxoArgumentativo: string;
+  analiseSecoes: string;
+  temasPrincipais: string;
+  teologiaCapitulo: string;
+  conexoesBiblicas: string;
+  pontosTensao: string;
+  principaisInterpretacoes: string;
+  mensagemCentral: string;
+  aplicacoes: string;
 }
 
 interface BookInsights {
-  autor: string
-  dataELocal: string
-  proposito: string
-  publicoAlvo: string
-  contextoHistorico: string
-  temasPrincipais: string
-  esboco: string
-  cristocentrismo: string
+  visaoGeral: string;
+  autoria: string;
+  dataELocal: string;
+  destinatarios: string;
+  contextoHistorico: string;
+  contextoCultural: string;
+  contextoGeografico: string;
+  ocasiao: string;
+  proposito: string;
+  generoLiterario: string;
+  estrutura: string;
+  fluxoLiterario: string;
+  temaCentral: string;
+  temasPrincipais: string;
+  teologia: string;
+  cristologia: string;
+  lugarHistoriaRedencao: string;
+  relacaoOutrosLivros: string;
+  usoAntigoTestamento: string;
+  palavrasConceitos: string;
+  personagensPrincipais: string;
+  cronologia: string;
+  principaisLugares: string;
+  questoesInterpretativas: string;
+  debatesTeologicos: string;
+  historiaInterpretacao: string;
+  canonicidade: string;
+  manuscritos: string;
+  contribuicaoUnica: string;
+  conclusaoTeologica: string;
 }
 
 interface VersesResult {
@@ -94,48 +162,65 @@ const BIBLE_VERSIONS = [
   ['NVT', 'Nova Versão Transformadora'],
 ] as const
 
-const VERSE_INSIGHT_SECTIONS: Array<{ label: string; key: keyof Pick<VerseInsights, 'exegese' | 'hermeneutica' | 'aplicacao' | 'homiletica'> }> = [
-  { label: 'Exegese', key: 'exegese' },
-  { label: 'Hermenêutica', key: 'hermeneutica' },
-  { label: 'Aplicação', key: 'aplicacao' },
-  { label: 'Homilética', key: 'homiletica' },
-]
-
-const BOOK_INSIGHT_SECTIONS: Array<{ label: string; key: keyof BookInsights; scripture?: boolean }> = [
-  { label: 'Autoria', key: 'autor' },
+const BOOK_INSIGHT_SECTIONS: Array<{ label: string; key: keyof BookInsights; scripture?: boolean; wide?: boolean }> = [
+  { label: 'Visão geral', key: 'visaoGeral', wide: true },
+  { label: 'Autoria', key: 'autoria' },
   { label: 'Data e local', key: 'dataELocal' },
-  { label: 'Propósito', key: 'proposito' },
-  { label: 'Público-alvo', key: 'publicoAlvo' },
+  { label: 'Destinatários', key: 'destinatarios' },
   { label: 'Contexto histórico', key: 'contextoHistorico' },
+  { label: 'Contexto cultural', key: 'contextoCultural' },
+  { label: 'Contexto geográfico', key: 'contextoGeografico' },
+  { label: 'Ocasião da escrita', key: 'ocasiao' },
+  { label: 'Propósito', key: 'proposito' },
+  { label: 'Gênero literário', key: 'generoLiterario' },
+  { label: 'Estrutura', key: 'estrutura', wide: true },
+  { label: 'Fluxo literário', key: 'fluxoLiterario' },
+  { label: 'Tema central', key: 'temaCentral' },
   { label: 'Temas principais', key: 'temasPrincipais' },
-  { label: 'Cristocentrismo', key: 'cristocentrismo' },
-  { label: 'Esboço do livro', key: 'esboco', scripture: true },
+  { label: 'Teologia', key: 'teologia' },
+  { label: 'Cristologia', key: 'cristologia' },
+  { label: 'Lugar na história da redenção', key: 'lugarHistoriaRedencao' },
+  { label: 'Relação com outros livros', key: 'relacaoOutrosLivros' },
+  { label: 'Uso do AT', key: 'usoAntigoTestamento' },
+  { label: 'Palavras e conceitos', key: 'palavrasConceitos' },
+  { label: 'Personagens principais', key: 'personagensPrincipais' },
+  { label: 'Cronologia', key: 'cronologia' },
+  { label: 'Principais lugares', key: 'principaisLugares' },
+  { label: 'Questões interpretativas', key: 'questoesInterpretativas' },
+  { label: 'Debates teológicos', key: 'debatesTeologicos' },
+  { label: 'História da interpretação', key: 'historiaInterpretacao' },
+  { label: 'Canonicidade', key: 'canonicidade' },
+  { label: 'Manuscritos', key: 'manuscritos' },
+  { label: 'Contribuição única', key: 'contribuicaoUnica' },
+  { label: 'Conclusão teológica', key: 'conclusaoTeologica', wide: true },
 ]
 
 const CHAPTER_INSIGHT_SECTIONS: Array<{ label: string; key: keyof ChapterInsights; scripture?: boolean; wide?: boolean }> = [
-  { label: 'Tema geral', key: 'temaGeral', wide: true },
-  { label: 'Contexto histórico e cultural', key: 'contextoHistoricoCultural' },
-  { label: 'Cenário', key: 'cenario' },
-  { label: 'Exegese', key: 'exegese' },
-  { label: 'Hermenêutica', key: 'hermeneutica' },
-  { label: 'Aplicação', key: 'aplicacao' },
-  { label: 'Referências messiânicas e escatológicas', key: 'referenciasMessianicasEscatologicas' },
-  { label: 'Tradição cristã', key: 'tradicaoCrista' },
-  { label: 'Visões teológicas', key: 'visoesTeologicas' },
-  { label: 'Curiosidades', key: 'curiosidades' },
-  { label: 'Homilética e esboço', key: 'homiletica', scripture: true, wide: true },
+  { label: 'Visão geral', key: 'visaoGeral', wide: true },
+  { label: 'Contexto imediato', key: 'contextoImediato' },
+  { label: 'Estrutura', key: 'estrutura' },
+  { label: 'Fluxo argumentativo', key: 'fluxoArgumentativo' },
+  { label: 'Análise das seções', key: 'analiseSecoes' },
+  { label: 'Temas principais', key: 'temasPrincipais' },
+  { label: 'Teologia do capítulo', key: 'teologiaCapitulo' },
+  { label: 'Conexões bíblicas', key: 'conexoesBiblicas' },
+  { label: 'Pontos de tensão', key: 'pontosTensao' },
+  { label: 'Principais interpretações', key: 'principaisInterpretacoes' },
+  { label: 'Mensagem central', key: 'mensagemCentral', wide: true },
+  { label: 'Aplicações', key: 'aplicacoes', wide: true },
 ]
 
 export default function LivroPage() {
   const toast = useToast()
   const params = useParams<{ livro: string }>()
   const livroNome = decodeURIComponent(params.livro)
+  const [activeMenuVerse, setActiveMenuVerse] = useState<number | null>(null)
   const livro = getLivro(livroNome)
   const [capitulo, setCapitulo] = useState(1)
   const [search, setSearch] = useState('')
   const [, setSelectedVerse] = useState<number | null>(null)
   const [, setAiLoading] = useState<number | null>(null)
-  const [aiInsights, setAiInsights] = useState<Record<number, VerseInsights>>({})
+  const [, setAiInsights] = useState<Record<number, VerseInsights>>({})
   const [aiChapterLoading, setAiChapterLoading] = useState(false)
   const [aiChapterInsights, setAiChapterInsights] = useState<ChapterInsights | null>(null)
   const [aiBookLoading, setAiBookLoading] = useState(false)
@@ -146,6 +231,16 @@ export default function LivroPage() {
   const [isVersionLoaded, setIsVersionLoaded] = useState(false)
   const [isReadingMode, setIsReadingMode] = useState(false)
   const [isVersionModalOpen, setIsVersionModalOpen] = useState(false)
+
+  // Nova análise de versículo
+  const [verseAnalysis, setVerseAnalysis] = useState<Record<number, VerseAnalysisResult>>({})
+  const [versionComparisons, setVersionComparisons] = useState<VersionComparisonEntry[]>([])
+  // Progresso ao vivo por versículo (para a barra inline enquanto a tela está aberta).
+  const [verseProgress, setVerseProgress] = useState<Record<number, VerseProgressState>>({})
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // track(): registra a geração no rastreador global (dock flutuante + notificações
+  // + continuidade em segundo plano quando o usuário sai desta página).
+  const { track } = useAnalysisProgress()
 
   // Controla se a página isolada de análise de capítulo/livro está aberta
   const [isolatedAnalysis, setIsolatedAnalysis] = useState<'livro' | 'capitulo' | number | null>(null)
@@ -209,33 +304,148 @@ export default function LivroPage() {
     setSelectedVerse(null)
     setAiChapterInsights(null)
     setSearch('')
-    if (nextChapter !== capitulo) setAiInsights({})
+    if (nextChapter !== capitulo) {
+      setAiInsights({})
+      setVerseAnalysis({})
+    }
     setCapitulo(nextChapter)
   }
 
-  const fetchInsights = async (verse: number, text: string) => {
-    if (aiInsights[verse]) {
+  // Buscar comparação de versões reais (o React Compiler memoiza esta função).
+  const fetchVersionComparison = async (verseNumber: number) => {
+    try {
+      const response = await fetch(`/api/bible/compare?bookIndex=${bookIndex}&chapter=${capitulo}&verse=${verseNumber}`)
+      if (response.ok) {
+        setVersionComparisons(await response.json() as VersionComparisonEntry[])
+      }
+    } catch {
+      // Comparação é não-bloqueante
+    }
+  }
+
+  // Limpa o polling da tela ao desmontar (a geração continua no servidor e é
+  // acompanhada pelo rastreador global).
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current)
+    }
+  }, [])
+
+  const fetchVerseAnalysis = async (verse: number, text: string) => {
+    // Se já tem a análise completa, exibe direto
+    if (verseAnalysis[verse] && (verseAnalysis[verse].auditStatus === 'APPROVED' || verseAnalysis[verse].auditStatus === 'NEEDS_REVIEW')) {
       setIsolatedAnalysis(verse)
+      fetchVersionComparison(verse)
       return
     }
     setAiLoading(verse)
     setIsolatedAnalysis(verse)
+    setVersionComparisons([])
+    setVerseProgress((current) => ({
+      ...current,
+      [verse]: { progress: 0, statusMessage: 'Iniciando análise…', waitingRateLimit: false, status: 'generating' },
+    }))
+    const verseRef = `${livro?.nome} ${capitulo}:${verse}`
     try {
-      const response = await fetch('/api/ai/bible-insights', {
+      const response = await fetch('/api/ai/verse-analysis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ verseRef: `${livro?.nome} ${capitulo}:${verse}`, verseText: text }),
+        body: JSON.stringify({ verseRef, verseText: text }),
       })
-      if (!response.ok) throw new Error('verse-insight-failed')
-      const data: VerseInsights = await response.json()
-      setAiInsights((current) => ({ ...current, [verse]: data }))
+      if (!response.ok) throw new Error('verse-analysis-failed')
+      const data = await response.json()
+
+      // Se já está completo (veio do cache)
+      if (data.auditStatus === 'APPROVED' || data.auditStatus === 'NEEDS_REVIEW') {
+        setVerseAnalysis((current) => ({ ...current, [verse]: data as VerseAnalysisResult }))
+        setAiLoading(null)
+        fetchVersionComparison(verse)
+        return
+      }
+
+      // Está gerando. Registra no rastreador global (dock + notificações +
+      // segundo plano) e faz um polling local para alimentar a barra inline.
+      if (data.docId && (data.status === 'GENERATING' || data.auditStatus === 'GENERATING')) {
+        const docId = data.docId as string
+        track({
+          docId,
+          verseRef,
+          href: livro ? `/biblia/${encodeURIComponent(livro.nome)}` : '/biblia',
+        })
+
+        // Semeia a barra com o progresso atual (relevante ao reabrir uma análise
+        // que já estava em andamento).
+        setVerseProgress((current) => ({
+          ...current,
+          [verse]: {
+            progress: typeof data.progress === 'number' ? data.progress : 0,
+            statusMessage: typeof data.statusMessage === 'string' ? data.statusMessage : 'Iniciando análise…',
+            waitingRateLimit: Boolean(data.waitingRateLimit),
+            currentModule: data.currentModule ?? null,
+            totalModules: data.totalModules ?? null,
+            status: 'generating',
+          },
+        }))
+
+        if (pollingRef.current) clearInterval(pollingRef.current)
+        pollingRef.current = setInterval(async () => {
+          try {
+            const pollResponse = await fetch(`/api/ai/verse-analysis?docId=${encodeURIComponent(docId)}`)
+            if (!pollResponse.ok) return
+            const pollData = await pollResponse.json()
+
+            if (pollData.auditStatus === 'APPROVED' || pollData.auditStatus === 'NEEDS_REVIEW') {
+              if (pollingRef.current) clearInterval(pollingRef.current)
+              pollingRef.current = null
+              setVerseAnalysis((current) => ({ ...current, [verse]: pollData as VerseAnalysisResult }))
+              setVerseProgress((current) => {
+                const next = { ...current }
+                delete next[verse]
+                return next
+              })
+              setAiLoading(null)
+              fetchVersionComparison(verse)
+            } else if (pollData.auditStatus === 'ERROR' || pollData.status === 'ERROR') {
+              if (pollingRef.current) clearInterval(pollingRef.current)
+              pollingRef.current = null
+              setVerseProgress((current) => ({
+                ...current,
+                [verse]: { ...current[verse], progress: current[verse]?.progress ?? 0, statusMessage: 'Erro ao gerar a análise', waitingRateLimit: false, status: 'error' },
+              }))
+              setAiLoading(null)
+            } else {
+              // Ainda gerando: atualiza a barra com o progresso reportado pelo pipeline.
+              setVerseProgress((current) => ({
+                ...current,
+                [verse]: {
+                  progress: typeof pollData.progress === 'number' ? pollData.progress : current[verse]?.progress ?? 0,
+                  statusMessage: pollData.statusMessage ?? current[verse]?.statusMessage ?? 'Processando…',
+                  waitingRateLimit: Boolean(pollData.waitingRateLimit),
+                  currentModule: pollData.currentModule ?? null,
+                  totalModules: pollData.totalModules ?? null,
+                  status: 'generating',
+                },
+              }))
+            }
+          } catch {
+            // Erro de polling — continua tentando na próxima iteração.
+          }
+        }, 4000)
+      }
     } catch {
       toast.error('Não foi possível gerar a análise deste versículo.')
       setIsolatedAnalysis(null)
-    } finally {
       setAiLoading(null)
+      setVerseProgress((current) => {
+        const next = { ...current }
+        delete next[verse]
+        return next
+      })
     }
   }
+
+  // Manter compatibilidade: fetchInsights antigo redireciona para o novo
+  const fetchInsights = fetchVerseAnalysis
 
   const fetchChapterInsights = async () => {
     if (aiChapterInsights) {
@@ -311,9 +521,201 @@ export default function LivroPage() {
     const isChapter = isolatedAnalysis === 'capitulo'
     const isVerse = typeof isolatedAnalysis === 'number'
 
-    let insights: VerseInsights | ChapterInsights | BookInsights | null = null
+    // ─── NOVA ANÁLISE DE VERSÍCULO ───────────────────────────────────
+    if (isVerse) {
+      const analysis = verseAnalysis[isolatedAnalysis]
+      const verseTitle = `${livro.nome} ${capitulo}:${isolatedAnalysis}`
+
+      if (!analysis) {
+        const progress = verseProgress[isolatedAnalysis]
+        const pct = progress?.progress ?? 0
+        const waiting = progress?.waitingRateLimit ?? false
+        const statusMessage = progress?.statusMessage ?? 'Iniciando análise…'
+        const isError = progress?.status === 'error'
+        return (
+          <WorkspacePage size="full" archetype="reader">
+            <div className="mx-auto flex min-h-[80vh] max-w-lg flex-col items-center justify-center gap-6 px-4 text-center">
+              <button
+                type="button"
+                onClick={() => setIsolatedAnalysis(null)}
+                className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <ChevronLeft size={16} /> Voltar (a análise continua em segundo plano)
+              </button>
+
+              <div className="flex flex-col items-center gap-2">
+                <span className={cn(
+                  'flex h-14 w-14 items-center justify-center rounded-2xl',
+                  isError ? 'bg-destructive/10 text-destructive' : waiting ? 'bg-amber-500/10 text-amber-500' : 'bg-primary-soft text-primary',
+                )}>
+                  {isError ? <ShieldAlert size={26} /> : waiting ? <Clock size={26} /> : <Loader2 size={26} className="animate-spin" />}
+                </span>
+                <h1 className="mt-2 font-serif text-2xl font-bold text-foreground sm:text-3xl">{verseTitle}</h1>
+                <p className="max-w-md text-sm text-muted-foreground">
+                  {isError
+                    ? 'Não foi possível concluir a análise. Toque no versículo novamente para tentar de novo.'
+                    : 'Gerando análise teológica avançada com auditoria em múltiplas camadas.'}
+                </p>
+              </div>
+
+              {!isError && (
+                <div className="w-full">
+                  <ProgressBar value={pct} indeterminate={waiting} showValue={!waiting} />
+                  <div className="mt-3 flex items-center justify-center gap-2 text-sm">
+                    {waiting && <Clock size={14} className="shrink-0 text-amber-500" />}
+                    <span className={cn('leading-snug', waiting ? 'text-amber-500' : 'text-muted-foreground')}>{statusMessage}</span>
+                  </div>
+                  {!waiting && progress?.currentModule && progress?.totalModules ? (
+                    <p className="mt-1 text-xs text-subtle">Módulo {progress.currentModule} de {progress.totalModules}</p>
+                  ) : null}
+                </div>
+              )}
+
+              <p className="max-w-md text-xs text-subtle">
+                Você pode fechar esta tela ou navegar pelo aplicativo — o processo segue em segundo plano e avisaremos por notificação quando terminar.
+              </p>
+            </div>
+          </WorkspacePage>
+        )
+      }
+
+      return (
+        <WorkspacePage size="full" archetype="reader">
+          <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6">
+            {/* Botão voltar */}
+            <button
+              type="button"
+              onClick={() => { setIsolatedAnalysis(null); setVersionComparisons([]) }}
+              className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-8"
+            >
+              <ChevronLeft size={16} /> Voltar para leitura
+            </button>
+
+            {/* Cabeçalho */}
+            <div className="mb-10 border-b border-hairline pb-8">
+              <div className="flex items-center gap-3 mb-3">
+                <p className="eyebrow text-scripture">Análise do Versículo</p>
+                {analysis.auditStatus === 'APPROVED' ? (
+                  <Badge variant="default" className="gap-1 text-success border-success/30 bg-success/10"><ShieldCheck size={12} /> Aprovado</Badge>
+                ) : (
+                  <Badge variant="warning" className="gap-1"><ShieldAlert size={12} /> Revisão</Badge>
+                )}
+              </div>
+              <h1 className="text-3xl font-serif font-bold text-foreground sm:text-5xl">{verseTitle}</h1>
+              {verses.find(v => v.verse === isolatedAnalysis) && (
+                <p className="mt-4 text-xl font-serif italic text-muted-foreground border-l-4 border-scripture/30 pl-4">
+                  &quot;{verses.find(v => v.verse === isolatedAnalysis)?.text}&quot;
+                </p>
+              )}
+              <p className="mt-4 text-muted-foreground leading-relaxed max-w-2xl">
+                Análise aprofundada gerada por inteligência artificial com auditoria teológica em múltiplas camadas.
+              </p>
+            </div>
+
+            {/* ── SEÇÃO 1: Análise Palavra-por-Palavra ── */}
+            {analysis.wordAnalysis && analysis.wordAnalysis.length > 0 && (
+              <section className="mb-12">
+                <SectionHeading
+                  icon={Languages}
+                  title="Análise Palavra-por-Palavra"
+                  description={`${analysis.wordAnalysis.length} palavras no texto original (${analysis.testament === 'AT' ? 'Hebraico/Aramaico' : 'Grego'})`}
+                />
+                <div className="surface rounded-2xl p-6 sm:p-8 mt-4">
+                  <WordAnalysis words={analysis.wordAnalysis} testament={analysis.testament} />
+                </div>
+              </section>
+            )}
+
+            {/* ── SEÇÃO 2: Estudo Aprofundado (5 seções) ── */}
+            <section className="mb-12">
+              <SectionHeading
+                icon={BrainCircuit}
+                title="Estudo Aprofundado"
+                description="Exegese, Hermenêutica, Contexto Histórico-Cultural, Contexto Literário e Teologia"
+              />
+              <div className="mt-4 space-y-3">
+                {analysis.exegese && (
+                  <StudySection
+                    title="Exegese"
+                    icon={BookText}
+                    content={analysis.exegese}
+                    isExtensive
+                    accentColor="border-blue-500"
+                    defaultOpen
+                  />
+                )}
+                {analysis.hermeneutica && (
+                  <StudySection
+                    title="Hermenêutica"
+                    icon={Microscope}
+                    content={analysis.hermeneutica}
+                    isExtensive
+                    accentColor="border-emerald-500"
+                  />
+                )}
+                {analysis.contextoHistoricoCultural && (
+                  <StudySection
+                    title="Contexto Histórico-Cultural"
+                    icon={Landmark}
+                    content={analysis.contextoHistoricoCultural}
+                    accentColor="border-amber-500"
+                  />
+                )}
+                {analysis.contextoLiterario && (
+                  <StudySection
+                    title="Contexto Literário"
+                    icon={FileText}
+                    content={analysis.contextoLiterario}
+                    accentColor="border-purple-500"
+                  />
+                )}
+                {analysis.teologia && (
+                  <StudySection
+                    title="Teologia"
+                    icon={Cross}
+                    content={analysis.teologia}
+                    accentColor="border-rose-500"
+                  />
+                )}
+              </div>
+            </section>
+
+            {/* ── SEÇÃO 3: Referências Cruzadas ── */}
+            {analysis.referenciasCruzadas && analysis.referenciasCruzadas.length > 0 && (
+              <section className="mb-12">
+                <SectionHeading
+                  icon={Link2}
+                  title="Referências Cruzadas"
+                  description={`${analysis.referenciasCruzadas.length} referências encontradas`}
+                />
+                <div className="surface rounded-2xl p-6 sm:p-8 mt-4">
+                  <CrossReferences references={analysis.referenciasCruzadas} />
+                </div>
+              </section>
+            )}
+
+            {/* ── SEÇÃO 4: Comparação de Versões ── */}
+            {versionComparisons.length > 0 && (
+              <section className="mb-12">
+                <SectionHeading
+                  icon={Languages}
+                  title="Comparação de Versões"
+                  description={`${versionComparisons.length} traduções comparadas · Dados reais (não gerados por IA)`}
+                />
+                <div className="mt-4">
+                  <VersionComparison comparisons={versionComparisons} testament={analysis.testament} />
+                </div>
+              </section>
+            )}
+          </div>
+        </WorkspacePage>
+      )
+    }
+
+    // ─── ANÁLISE DE CAPÍTULO / LIVRO (preservada) ────────────────────
+    let insights: ChapterInsights | BookInsights | null = null
     let title = ''
-    let sections: { label: string; key: keyof VerseInsights | keyof ChapterInsights | keyof BookInsights; wide?: boolean }[] = []
+    let sections: { label: string; key: keyof ChapterInsights | keyof BookInsights; wide?: boolean }[] = []
     let eyebrow = ''
 
     if (isBook) {
@@ -326,11 +728,6 @@ export default function LivroPage() {
       title = `${livro.nome} ${capitulo}`
       sections = CHAPTER_INSIGHT_SECTIONS
       eyebrow = 'Lente Exegética'
-    } else if (isVerse) {
-      insights = aiInsights[isolatedAnalysis]
-      title = `${livro.nome} ${capitulo}:${isolatedAnalysis}`
-      sections = VERSE_INSIGHT_SECTIONS
-      eyebrow = 'Análise do Versículo'
     }
 
     if (!insights) {
@@ -358,11 +755,6 @@ export default function LivroPage() {
           <div className="mb-10 border-b border-hairline pb-8">
             <p className="eyebrow text-scripture mb-3">{eyebrow}</p>
             <h1 className="text-3xl font-serif font-bold text-foreground sm:text-5xl">{title}</h1>
-            {isVerse && verses.find(v => v.verse === isolatedAnalysis) && (
-              <p className="mt-4 text-xl font-serif italic text-muted-foreground border-l-4 border-scripture/30 pl-4">
-                &quot;{verses.find(v => v.verse === isolatedAnalysis)?.text}&quot;
-              </p>
-            )}
             <p className="mt-4 text-muted-foreground leading-relaxed max-w-2xl">
               Análise aprofundada gerada por inteligência artificial para auxiliar no seu estudo e pregação.
             </p>
@@ -386,37 +778,13 @@ export default function LivroPage() {
                 <div key={sec.key as string} className={cn("rounded-2xl border p-6 sm:p-8", colorClass, sec.wide ? "md:col-span-2" : "")}>
                   <h3 className="font-semibold text-foreground mb-4 text-lg border-b border-hairline pb-2">{sec.label}</h3>
                   <div className="prose prose-sm sm:prose-base max-w-none text-muted-foreground prose-strong:text-foreground prose-strong:font-bold prose-headings:text-foreground">
-                    <Markdown>{(insights as unknown as Record<string, string>)?.[sec.key as string] || ''}</Markdown>
+                    <Markdown>{content || ''}</Markdown>
                   </div>
                 </div>
               )
             })}
           </div>
 
-          {isVerse && (insights as VerseInsights).versiculosRelacionados?.length > 0 && (
-            <div className="mt-8 rounded-2xl border border-hairline bg-surface p-6 sm:p-8">
-              <h3 className="font-semibold text-foreground mb-4 text-lg border-b border-hairline pb-2">Referências cruzadas</h3>
-              <div className="flex flex-wrap gap-2">
-                {(insights as VerseInsights).versiculosRelacionados.map((ref: string) => <Badge key={ref} variant="warning">{ref}</Badge>)}
-              </div>
-            </div>
-          )}
-
-          {isVerse && (insights as VerseInsights).comparacaoVersoes?.length > 0 && (
-            <div className="mt-6 rounded-2xl border border-hairline bg-surface p-6 sm:p-8">
-              <h3 className="font-semibold text-foreground mb-4 text-lg border-b border-hairline pb-2 flex items-center gap-2">
-                <Languages size={18} /> Comparação de traduções
-              </h3>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {(insights as VerseInsights).comparacaoVersoes.map((comp: { versao: string, texto: string }) => (
-                  <div key={comp.versao} className="rounded-xl border border-hairline bg-elevated/40 p-4">
-                    <Badge variant="outline" className="mb-2">{comp.versao}</Badge>
-                    <p className="font-serif text-sm italic leading-relaxed text-muted-foreground">&quot;{comp.texto}&quot;</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </WorkspacePage>
     )
@@ -465,19 +833,19 @@ export default function LivroPage() {
         meta={<><Badge variant={isOldTestament ? 'warning' : 'default'}>{isOldTestament ? 'Antiga Aliança' : 'Nova Aliança'}</Badge><Badge variant="outline">Capítulo {capitulo}</Badge></>}
       />
 
-      <div className="flex w-full max-w-xl mx-auto items-center justify-center gap-4 mb-8 px-4">
-        <Button type="button" variant="outline" className="flex-1 h-12 text-scripture border-scripture/20 hover:border-scripture/50" onClick={() => setIsReadingMode(true)}>
+      <div className="flex w-full items-center justify-start gap-3 mb-8">
+        <Button type="button" variant="outline" className="flex-1 sm:flex-none sm:w-48 h-12 text-scripture border-scripture/20 hover:border-scripture/50" onClick={() => setIsReadingMode(true)}>
           Modo Leitura
         </Button>
-        <Button type="button" variant="outline" className="flex-1 h-12" onClick={() => setIsVersionModalOpen(true)}>
+        <Button type="button" variant="outline" className="flex-1 sm:flex-none sm:w-48 h-12" onClick={() => setIsVersionModalOpen(true)}>
           <Languages size={14} className="mr-2 opacity-50 shrink-0" />
           <span className="truncate">{version}</span>
           <ChevronDown size={14} className="ml-2 opacity-50 shrink-0" />
         </Button>
       </div>
       
-      <Modal isOpen={isVersionModalOpen} onClose={() => setIsVersionModalOpen(false)} title="Tradução da Bíblia" description="Escolha a versão que você prefere para sua leitura.">
-        <div className="grid gap-2 max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar">
+      <Modal size="md" position="top" isOpen={isVersionModalOpen} onClose={() => setIsVersionModalOpen(false)} title="Tradução da Bíblia" description="Escolha a versão que você prefere para sua leitura.">
+        <div className="grid gap-2 max-h-[40vh] overflow-y-auto overscroll-contain pr-1 custom-scrollbar">
           {BIBLE_VERSIONS.map(([key, name]) => (
             <button
               key={key}
@@ -574,21 +942,37 @@ export default function LivroPage() {
                 <div className="space-y-1">
                   {filteredVerses.map((verse) => {
                     return (
-                      <div key={verse.verse} className="group flex items-start gap-2 rounded-xl px-3 py-2 transition-colors sm:px-4 sm:py-3 hover:bg-elevated/45">
+                      <div key={verse.verse} className="group flex items-start gap-2 rounded-xl px-3 py-2 transition-colors sm:px-4 sm:py-3 hover:bg-elevated/45 relative">
                         <div className="reading flex-1 pt-1">
                           <span className="verse-number">{verse.verse}</span>
                           <span className="text-foreground/85 group-hover:text-foreground transition-colors">{verse.text}</span>
                         </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => fetchInsights(verse.verse, verse.text)}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 bg-scripture-soft text-scripture hover:bg-scripture/20 hover:text-scripture h-8 w-8"
-                          aria-label="Gerar análise do versículo"
-                        >
-                          <Sparkles size={14} />
-                        </Button>
+                        <div className="relative shrink-0 flex flex-col items-end">
+                          <button
+                            type="button"
+                            onClick={() => setActiveMenuVerse(activeMenuVerse === verse.verse ? null : verse.verse)}
+                            className="flex items-center justify-center h-8 w-8 rounded-md border border-hairline bg-transparent hover:bg-elevated text-subtle transition-colors"
+                            aria-label="Opções do versículo"
+                          >
+                            <MoreHorizontal size={16} />
+                          </button>
+                          
+                          {activeMenuVerse === verse.verse && (
+                            <div className="absolute right-0 top-10 z-10 animate-in fade-in slide-in-from-top-2 w-44 rounded-lg border border-hairline bg-surface p-1 shadow-lg">
+                              <button
+                                type="button"
+                                className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm text-foreground hover:bg-elevated transition-colors"
+                                onClick={() => {
+                                  setActiveMenuVerse(null);
+                                  fetchInsights(verse.verse, verse.text);
+                                }}
+                              >
+                                <Sparkles size={16} className="text-scripture" />
+                                <span>Gerar Análise</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )
                   })}
