@@ -203,7 +203,7 @@ export async function prepareStandalone({ projectRoot = process.cwd() } = {}) {
     // Fallback para bug do Turbopack: copia o middleware-manifest se ele não foi copiado
     try {
       await cp(join(paths.nextDirectory, 'server', 'middleware-manifest.json'), join(paths.standaloneNextDirectory, 'server', 'middleware-manifest.json'), { force: true })
-    } catch (e) {
+    } catch {
       // ignora se não existir
     }
 

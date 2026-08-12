@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- Pipeline de IA: payloads e
+   retornos do AI SDK são dinâmicos. Tipar estritamente traria muito atrito aqui. */
 import { generateObject } from 'ai'
 import { z } from 'zod'
 import { getModel, currentModelInfo } from '@/lib/ai'

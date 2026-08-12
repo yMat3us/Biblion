@@ -10,6 +10,18 @@ import { Textarea } from '@/components/ui/Textarea'
 import { useToast } from '@/components/ui/Feedback'
 import { cn } from '@/lib/utils'
 
+// Mensagens rotativas do carregamento. Em escopo de módulo (constante estável),
+// para não virar dependência reativa do efeito nem ser recriada a cada render.
+const mensagensCarregamento = [
+  'Iniciando Inteligência Artificial...',
+  'Buscando referências bíblicas...',
+  'Lendo o contexto histórico...',
+  'Escrevendo reflexões pastorais...',
+  'Gerando perguntas e ações...',
+  'Revisando teologia do plano...',
+  'Finalizando os dias...',
+]
+
 type Modo = 'ia' | 'manual'
 type Visibilidade = 'PRIVATE' | 'PUBLIC'
 
@@ -119,6 +131,7 @@ function FormularioIA({ router, toast }: FormProps) {
   async function gerar() {
     if (gerando || disabled) return
     setGerando(true)
+    setLoadingMsgIdx(0)
     try {
       const response = await fetch('/api/ai/plano', {
         method: 'POST',
@@ -144,27 +157,14 @@ function FormularioIA({ router, toast }: FormProps) {
   }
 
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0)
-  
-  const mensagensCarregamento = [
-    'Iniciando Inteligência Artificial...',
-    'Buscando referências bíblicas...',
-    'Lendo o contexto histórico...',
-    'Escrevendo reflexões pastorais...',
-    'Gerando perguntas e ações...',
-    'Revisando teologia do plano...',
-    'Finalizando os dias...'
-  ]
 
-  // Effect para rotacionar as mensagens enquanto gera
+  // Rotaciona as mensagens enquanto gera. O reset do índice acontece no início
+  // da geração (em `gerar`), fora do efeito — evita setState síncrono aqui.
   useEffect(() => {
-    let interval: NodeJS.Timeout
-    if (gerando) {
-      interval = setInterval(() => {
-        setLoadingMsgIdx((i) => (i < mensagensCarregamento.length - 1 ? i + 1 : i))
-      }, 4500)
-    } else {
-      setLoadingMsgIdx(0)
-    }
+    if (!gerando) return
+    const interval = setInterval(() => {
+      setLoadingMsgIdx((i) => (i < mensagensCarregamento.length - 1 ? i + 1 : i))
+    }, 4500)
     return () => clearInterval(interval)
   }, [gerando])
 

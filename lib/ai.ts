@@ -1,13 +1,15 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- Adaptador do AI SDK: os
+   payloads e retornos são dinâmicos (overloads complexos do SDK). Tipar tudo
+   estritamente traria muito atrito e pouco ganho neste arquivo de integração. */
 import { generateObject as originalGenerateObject, generateText } from 'ai'
 import { openai, createOpenAI } from '@ai-sdk/openai'
-import { createGroq } from '@ai-sdk/groq'
 import { google } from '@ai-sdk/google'
 import { deepseek } from '@ai-sdk/deepseek'
 import { z } from 'zod'
 import { ApiErrors } from '@/lib/http'
 import { logAiUsage, startTimer, type RawUsage } from '@/lib/observability'
 
-async function generateObject<T>(args: any): Promise<any> {
+async function generateObject(args: any): Promise<any> {
   const isGroq = configuredProvider() === 'groq';
   let system = args.system;
   let prompt = args.prompt;
@@ -24,7 +26,7 @@ async function generateObject<T>(args: any): Promise<any> {
     }
   }
 
-  return originalGenerateObject<T>({
+  return originalGenerateObject({
     ...args,
     ...(system !== undefined && { system }),
     ...(prompt !== undefined && { prompt }),
@@ -103,7 +105,7 @@ export function getModel(modelType?: string) {
         return fetch(url, init)
       }
     })
-    return groqOpenAIProvider.chat(modelId('groq'), { structuredOutputs: false })
+    return groqOpenAIProvider.chat(modelId('groq'))
   }
   if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
     throw ApiErrors.serviceUnavailable('Google Gemini não está configurado')
@@ -221,7 +223,9 @@ D - Não atribua posições anacrônicas sem fonte primária.
 E - Não classifique conceitos teológicos automaticamente como personificação literária.
 ${UNTRUSTED_DATA_RULE}`
 
-  const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+  // Em testes (vitest) as esperas são puladas para o pipeline rodar rápido.
+  const delay = (ms: number) =>
+    process.env.VITEST ? Promise.resolve() : new Promise(res => setTimeout(res, ms));
 
   async function safeGenerateObject(args: any): Promise<any> {
     await delay(4500); // Garante 4.5s entre chamadas para não estourar os 15 RPM
@@ -669,7 +673,7 @@ ${dias > 25 ? '- REGRA ESTRITA: O plano é grande, portanto NÃO escreva "Dia X"
       if (res.status === 'fulfilled') {
         successfulResults.push(res.value)
         if (onBatchGenerated) {
-          const batchWithDays = res.value.object.dias.map((dia, i) => ({
+          const batchWithDays = res.value.object.dias.map((dia: PlanBatch['dias'][number], i: number) => ({
             ...dia,
             dia: res.value.startDay + i
           }))

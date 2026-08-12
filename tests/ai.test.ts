@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- Mocks do AI SDK usam any
+   deliberadamente para simular payloads dinâmicos nos testes. */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as aiSdk from 'ai';
 import { generateBibleInsights } from '../lib/ai';
@@ -13,6 +15,10 @@ vi.mock('ai', async (importOriginal) => {
 describe('AI Pipeline: generateBibleInsights', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // getModel() é chamado de verdade (só generateObject é mockado). Configura um
+    // provedor de IA fictício para não lançar "Nenhum provedor de IA configurado".
+    process.env.AI_PROVIDER = 'gemini';
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY = 'test-key';
   });
 
   it('should run module audit and global audit properly', { timeout: 120000 }, async () => {
