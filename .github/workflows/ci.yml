@@ -76,6 +76,9 @@ jobs:
           UPSTASH_REDIS_REST_TOKEN: ci-placeholder
           CAPACITOR_SERVER_URL: https://biblion.example.invalid
           CRON_SECRET: this-is-a-valid-fake-cron-secret
+          FIREBASE_PROJECT_ID: ci-project
+          FIREBASE_CLIENT_EMAIL: ci@example.invalid
+          FIREBASE_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nci-placeholder\n-----END PRIVATE KEY-----\n"
         run: npm run check:production-env
 
       - name: Audit production dependencies

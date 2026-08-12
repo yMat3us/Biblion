@@ -97,6 +97,19 @@ export function validateProductionEnv(env = process.env) {
     errors.push('OPENAI_API_KEY é obrigatória para AI_PROVIDER=openai')
   }
 
+  // Firebase Admin (Firestore): obrigatório em produção — as análises bíblicas
+  // e os tokens de push dependem dele. Sem estas variáveis, as rotas de IA que
+  // gravam no Firestore falham em runtime (app/invalid-credential).
+  for (const name of ['FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_PRIVATE_KEY']) {
+    if (!clean(env, name)) {
+      errors.push(`${name} é obrigatória em produção (Firebase Admin / Firestore)`)
+    }
+  }
+  const firebasePrivateKey = clean(env, 'FIREBASE_PRIVATE_KEY')
+  if (firebasePrivateKey && !firebasePrivateKey.includes('PRIVATE KEY')) {
+    errors.push('FIREBASE_PRIVATE_KEY não parece ser uma chave privada válida (esperado o bloco "-----BEGIN PRIVATE KEY-----" com quebras \\n)')
+  }
+
   const redisUrl = clean(env, 'UPSTASH_REDIS_REST_URL')
   const redisToken = clean(env, 'UPSTASH_REDIS_REST_TOKEN')
   if (Boolean(redisUrl) !== Boolean(redisToken)) {
