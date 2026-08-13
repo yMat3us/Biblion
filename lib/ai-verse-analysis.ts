@@ -285,11 +285,18 @@ DADOS: ${JSON.stringify(data)}`
         
         lastObject = object;
         const localAudit = await runModuleAudit(moduleNumber, object);
-        if (localAudit.approved) {
+        // Só reprocessa por problemas BLOQUEANTES (HIGH/CRITICAL). Questões
+        // MEDIUM/LOW são refinamentos interpretativos/estilísticos e não valem o
+        // custo de mais uma rodada de IA — o validador determinístico continua
+        // sendo o guardião dos erros factuais (Strong, referências, completude).
+        const blocking = localAudit.issues.filter(
+          (i: any) => i.severity === 'HIGH' || i.severity === 'CRITICAL',
+        );
+        if (localAudit.approved || blocking.length === 0) {
           return object as T;
         } else {
-          currentCorrection = (currentCorrection ? currentCorrection + ' | ' : '') + localAudit.issues.map((i: any) => i.correctionInstruction).join(' | ');
-          console.log(`[Pipeline] MODULE_AUDIT_RETRY for Module ${moduleNumber}. Attempt ${attempts + 1}`);
+          currentCorrection = (currentCorrection ? currentCorrection + ' | ' : '') + blocking.map((i: any) => i.correctionInstruction).join(' | ');
+          console.log(`[Pipeline] MODULE_AUDIT_RETRY for Module ${moduleNumber}. Attempt ${attempts + 1} (${blocking.length} bloqueante(s))`);
         }
       } catch (e) {
         console.error(`[Pipeline] MODULE_ERROR for Module ${moduleNumber}. Attempt ${attempts + 1}`, e);
@@ -388,11 +395,18 @@ DADOS: ${JSON.stringify(data)}`
   let globalAuditResult = await runGlobalAudit(fullData);
   let retryCount = 0;
   
-  while (!globalAuditResult.approved && retryCount < 2) {
+  while (retryCount < 2) {
+    // Só corrige por problemas BLOQUEANTES (HIGH/CRITICAL). MEDIUM/LOW são
+    // refinamentos e não valem novas rodadas de IA (evita o pipeline "eterno").
+    const blockingGlobal = globalAuditResult.issues.filter(
+      (i: any) => i.severity === 'HIGH' || i.severity === 'CRITICAL',
+    );
+    if (blockingGlobal.length === 0) break;
+
     console.log('[Pipeline] ISSUES_FOUND, GLOBAL_CORRECTION_STARTED. Attempt:', retryCount + 1);
     reporter.step(72, 'audit', `Aplicando correções da auditoria (rodada ${retryCount + 1})…`);
     
-    const issuesByModule = globalAuditResult.issues.reduce((acc: any, issue: any) => {
+    const issuesByModule = blockingGlobal.reduce((acc: any, issue: any) => {
       if (!acc[issue.moduleNumber]) acc[issue.moduleNumber] = [];
       acc[issue.moduleNumber].push(issue);
       return acc;

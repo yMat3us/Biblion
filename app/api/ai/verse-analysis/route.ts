@@ -82,39 +82,53 @@ export const POST = route(
       })
     }
 
-    // Persiste cada atualização de progresso no doc (merge) para o polling do
-    // cliente. Best-effort: uma falha de escrita nunca deve interromper o pipeline.
-    const onProgress = (p: AnalysisProgress) => {
-      void docRef
-        .set(
-          {
-            auditStatus: 'GENERATING',
-            verseRef,
-            progress: p.progress,
-            phase: p.phase,
-            statusMessage: p.statusMessage,
-            currentModule: p.currentModule ?? null,
-            totalModules: p.totalModules ?? null,
-            waitingRateLimit: p.waitingRateLimit ?? false,
-            rateLimitSeconds: p.rateLimitSeconds ?? null,
-            progressUpdatedAt: new Date().toISOString(),
-          },
-          { merge: true },
-        )
+    // Fila de escritas SERIALIZADA. As escritas de progresso são disparadas sem
+    // await (fire-and-forget); sem serialização, uma escrita de progresso atrasada
+    // podia chegar ao Firestore DEPOIS da escrita final e reverter o doc para
+    // GENERATING (bug: análise concluída mas travada em 88%). Encadeando todas as
+    // escritas, e aguardando a fila antes da escrita final, garantimos que o
+    // resultado final seja sempre a ÚLTIMA gravação aplicada.
+    let writeChain: Promise<unknown> = Promise.resolve()
+    const queueWrite = (data: Record<string, unknown>, merge: boolean): Promise<unknown> => {
+      writeChain = writeChain
+        .then(() => (merge ? docRef.set(data, { merge: true }) : docRef.set(data)))
         .catch((error: unknown) => {
-          console.error('[Pipeline] Failed to persist progress:', error)
+          console.error('[Pipeline] Failed to persist doc:', error)
         })
+      return writeChain
+    }
+
+    // Persiste cada atualização de progresso (merge) para o polling do cliente.
+    const onProgress = (p: AnalysisProgress) => {
+      queueWrite(
+        {
+          auditStatus: 'GENERATING',
+          verseRef,
+          progress: p.progress,
+          phase: p.phase,
+          statusMessage: p.statusMessage,
+          currentModule: p.currentModule ?? null,
+          totalModules: p.totalModules ?? null,
+          waitingRateLimit: p.waitingRateLimit ?? false,
+          rateLimitSeconds: p.rateLimitSeconds ?? null,
+          progressUpdatedAt: new Date().toISOString(),
+        },
+        true,
+      )
       maybePush(p)
     }
 
     generateVerseAnalysis(verseRef, verseText, onProgress)
       .then(async (analysis) => {
         // O pipeline já define auditStatus (APPROVED ou NEEDS_REVIEW).
-        // Grava o resultado final já com progresso 100% para o cliente encerrar.
         const statusMessage =
           analysis.auditStatus === 'APPROVED'
             ? 'Análise concluída e aprovada'
             : 'Análise concluída (requer revisão)'
+        // Drena todas as escritas de progresso pendentes e então grava o resultado
+        // final por ÚLTIMO (substituindo o doc), para nenhuma escrita atrasada
+        // reverter o status concluído.
+        await writeChain
         await docRef.set({
           ...analysis,
           userId: user.id,
@@ -135,6 +149,7 @@ export const POST = route(
       .catch(async (error: unknown) => {
         console.error('[Pipeline] Error generating verse analysis:', error)
         const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido'
+        await writeChain
         await docRef.set({
           auditStatus: 'ERROR',
           error: errorMessage,
