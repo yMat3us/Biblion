@@ -442,3 +442,18 @@ describe('Bateria final: integridade e economia', () => {
     expect(() => JSON.stringify(res.result)).not.toThrow()
   })
 })
+
+describe('runReviewPass — auditor adversarial retorna NEEDS_REVIEW', () => {
+  it('status NEEDS_REVIEW da auditoria mantém o draft intacto e não aprova', async () => {
+    // O auditor achou um problema que não consegue corrigir com segurança.
+    mockGenerateObject.mockResolvedValue({ object: { status: 'NEEDS_REVIEW', corrections: [] } })
+
+    const draft = makeDraft()
+    const result = await runReviewPass(draft)
+
+    expect(result.auditStatus).toBe('NEEDS_REVIEW')
+    expect(result.auditDetails).toMatch(/não pôde ser corrigido com segurança/i)
+    expect(result.exegese).toBe(draft.exegese) // draft preservado
+    expect(mockValidate).not.toHaveBeenCalled() // não valida nem aprova
+  })
+})
