@@ -2,34 +2,14 @@ import type { NextRequest } from 'next/server'
 import { route } from '@/lib/route'
 import { ok, ApiErrors } from '@/lib/http'
 import { parseJson, aiVerseSchema } from '@/lib/validation'
-import { generateVerseAnalysis } from '@/lib/ai-verse-analysis'
-import type { AnalysisProgress } from '@/lib/ai-audit-types'
+import { generateVerseAnalysis, runReviewPass } from '@/lib/ai-verse-analysis'
+import type { AnalysisProgress, VerseAnalysisResult } from '@/lib/ai-audit-types'
 import { RateLimits } from '@/lib/rate-limit'
 import { db } from '@/lib/firebase'
 import { sendAnalysisPush } from '@/lib/push'
+import { decideAnalysisMode, extractStoredDraft, isStaleGenerating } from '@/lib/verse-analysis-cache'
 
 export const maxDuration = 300
-
-// Uma análise em GENERATING que não recebe atualização de progresso há mais de
-// STALE_GENERATING_MS foi, quase certamente, interrompida — o servidor reiniciou
-// e matou o pipeline em memória. O limite é folgado de propósito: uma única
-// chamada de IA lenta (auditoria com muitos retries, backoff de rate limit) pode
-// deixar minutos entre gravações de progresso num pipeline VIVO. Um valor apertado
-// causava falso positivo (a análise seguia rodando, mas era marcada como
-// interrompida). Só um processo realmente morto fica sem gravar por 5 min.
-const STALE_GENERATING_MS = 300_000
-
-function isStaleGenerating(data: Record<string, unknown> | undefined): boolean {
-  if (!data || data.auditStatus !== 'GENERATING') return false
-  const ts =
-    (typeof data.progressUpdatedAt === 'string' && data.progressUpdatedAt) ||
-    (typeof data.startedAt === 'string' && data.startedAt) ||
-    null
-  if (!ts) return true
-  const parsed = Date.parse(ts)
-  if (!Number.isFinite(parsed)) return true
-  return Date.now() - parsed > STALE_GENERATING_MS
-}
 
 export const POST = route(
   async (req: NextRequest, _ctx, user) => {
@@ -42,27 +22,69 @@ export const POST = route(
       .replace(/[^a-z0-9]/g, '-')
 
     const docRef = db.collection('verseAnalysis').doc(docId)
-    const docSnap = await docRef.get()
-    const existing = docSnap.data()
 
-    // Reutiliza o doc só se estiver concluído ou realmente em andamento. Docs
-    // travados em GENERATING por uma interrupção (restart) caem no fluxo de
-    // (re)geração abaixo.
-    if (docSnap.exists && existing?.auditStatus !== 'ERROR' && !isStaleGenerating(existing)) {
+    // CACHE + DEDUPLICAÇÃO ATÔMICA (numa única transação, sem janela de corrida).
+    // Decide o modo de forma atômica a partir do estado atual do doc:
+    // - APPROVED (válido)        → CACHE HIT: devolve do banco, nenhuma IA;
+    // - GENERATING (vivo)        → IN-FLIGHT: devolve o doc em andamento (dedup);
+    // - NEEDS_REVIEW + draft OK   → REVIEW-RETRY: reivindica e roda SÓ a revisão
+    //                               sobre o draft existente (NÃO regera — economia);
+    // - inexistente/ERROR/stale/  → GENERATE: reivindica e roda a geração completa.
+    //   NEEDS_REVIEW sem draft
+    // Um get()+set() separado deixava uma janela entre leitura e escrita em que
+    // dois pedidos simultâneos disparavam dois trabalhos. A transação a fecha.
+    const claim = await db.runTransaction<
+      | { mode: 'cache' | 'inflight' | 'review-retry'; data: Record<string, unknown> }
+      | { mode: 'generate'; data: null }
+    >(async (tx) => {
+      const snap = await tx.get(docRef)
+      const data = snap.data() as Record<string, unknown> | undefined
+      const mode = decideAnalysisMode(data, snap.exists)
+
+      if (mode === 'cache' || mode === 'inflight') {
+        return { mode, data: data as Record<string, unknown> }
+      }
+
+      if (mode === 'review-retry') {
+        // Reivindica o doc para RETRY da revisão, preservando o conteúdo do draft
+        // (merge) e sinalizando a fase de revisão para o polling/dedup.
+        tx.set(
+          docRef,
+          {
+            auditStatus: 'GENERATING',
+            verseRef,
+            userId: user.id,
+            startedAt: new Date().toISOString(),
+            progressUpdatedAt: new Date().toISOString(),
+            progress: 90,
+            phase: 'reviewing',
+            statusMessage: 'Revisando e auditando a análise…',
+            waitingRateLimit: false,
+          },
+          { merge: true },
+        )
+        return { mode, data: data as Record<string, unknown> }
+      }
+
+      // Inexistente / ERROR / stale / NEEDS_REVIEW sem draft → geração completa.
+      tx.set(docRef, {
+        auditStatus: 'GENERATING',
+        verseRef,
+        userId: user.id,
+        startedAt: new Date().toISOString(),
+        progress: 0,
+        phase: 'starting',
+        statusMessage: 'Iniciando análise teológica avançada…',
+      })
+      return { mode: 'generate', data: null }
+    })
+
+    if (claim.mode === 'cache' || claim.mode === 'inflight') {
+      console.log(`[AI_ANALYSIS] ${claim.mode === 'cache' ? 'cache hit' : 'in-flight (dedup)'} — ${docId}`)
       // Inclui o docId para que o cliente possa retomar o polling/rastreamento
       // ao reabrir um versículo cuja análise ainda está em geração.
-      return ok({ ...existing, docId })
+      return ok({ ...claim.data, docId })
     }
-
-    await docRef.set({
-      auditStatus: 'GENERATING',
-      verseRef,
-      userId: user.id,
-      startedAt: new Date().toISOString(),
-      progress: 0,
-      phase: 'starting',
-      statusMessage: 'Iniciando análise teológica avançada…',
-    })
 
     // Envia push nativo (barra de notificações do celular) a cada MARCO — troca
     // de módulo ou de estado de rate limit — para não gerar spam. As demais
@@ -118,7 +140,18 @@ export const POST = route(
       maybePush(p)
     }
 
-    generateVerseAnalysis(verseRef, verseText, onProgress)
+    // REVIEW-RETRY reusa o draft e roda só a 2ª etapa; caso contrário, geração
+    // completa. Ambos retornam um VerseAnalysisResult e compartilham a mesma
+    // escrita final serializada abaixo.
+    let pipeline: Promise<VerseAnalysisResult>
+    if (claim.mode === 'review-retry') {
+      console.log(`[AI_ANALYSIS] review retry (reaproveitando draft, sem regerar) — ${docId}`)
+      pipeline = runReviewPass(extractStoredDraft(claim.data, verseRef, verseText), onProgress)
+    } else {
+      pipeline = generateVerseAnalysis(verseRef, verseText, onProgress)
+    }
+
+    pipeline
       .then(async (analysis) => {
         // O pipeline já define auditStatus (APPROVED ou NEEDS_REVIEW).
         const statusMessage =

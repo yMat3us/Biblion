@@ -7,13 +7,18 @@ import { getLivro } from '@/data/livros'
 import { runDeterministicValidation, generateCorrectionPrompt } from '@/lib/ai-validators'
 import type {
   VerseAnalysisResult,
+  WordAnalysisEntry,
+  CrossReference,
   AuditStatus,
   AnalysisPhase,
   AnalysisProgress,
   ProgressCallback,
 } from '@/lib/ai-audit-types'
 
-const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+// Em testes (vitest) as esperas de throttle são puladas para o pipeline rodar
+// rápido — o comportamento de rate limit é irrelevante para os testes de lógica.
+const delay = (ms: number) =>
+  process.env.VITEST ? Promise.resolve() : new Promise(res => setTimeout(res, ms));
 
 /**
  * Provedor de IA ativo. O throttling do pipeline é bem diferente por provedor:
@@ -222,6 +227,335 @@ const globalAuditorSchema = z.object({
     correctionInstruction: z.string()
   }))
 });
+
+// ---------------------------------------------------------------------------
+// 2ª ETAPA — REVISÃO POR PATCHES (economia de tokens + sem truncamento)
+// ---------------------------------------------------------------------------
+//
+// Em vez de a IA reproduzir a análise inteira (milhares de tokens de saída, com
+// risco de truncamento), a revisão devolve APENAS as CORREÇÕES necessárias
+// (patches estruturados). O backend as aplica ao DRAFT de forma determinística e
+// então revalida o resultado inteiro. Se nada precisa mudar, a IA devolve
+// `corrections: []` e FINAL = DRAFT — saída mínima.
+
+/** Seções de texto que a revisão pode reescrever. `reference`, `verseText` e
+ *  `testament` NÃO estão aqui: são dados do sistema (request) e nunca podem ser
+ *  sobrescritos pela IA (campos protegidos). */
+const REVIEW_SECTION_FIELDS = [
+  'exegese',
+  'hermeneutica',
+  'contextoHistoricoCultural',
+  'contextoLiterario',
+  'teologia',
+] as const
+
+const reviewWordSchema = z.object({
+  strongCode: z.string(),
+  originalWord: z.string(),
+  transliteration: z.string(),
+  meaning: z.string(),
+  contextAnalysis: z.string(),
+})
+
+const reviewCrossRefSchema = z.object({
+  referencia: z.string(),
+  tipo: z.enum(['paralelo', 'alusao', 'tipologia', 'profecia']),
+  descricao: z.string(),
+})
+
+/**
+ * Correção estruturada (patch). Schema FLAT de propósito (sem discriminatedUnion
+ * nem paths arbitrários): cada patch tem um `op` e só os campos daquele `op`
+ * preenchidos — os demais vêm `null`. Isso mantém a saída válida em qualquer
+ * provider e impede que a IA aponte para propriedades fora da estrutura
+ * permitida. Cada patch é validado no backend antes de ser aplicado.
+ */
+const reviewCorrectionSchema = z.object({
+  op: z.enum([
+    'setSection',
+    'replaceWord',
+    'addWord',
+    'removeWord',
+    'replaceCrossReference',
+    'addCrossReference',
+    'removeCrossReference',
+  ]),
+  section: z
+    .enum(['exegese', 'hermeneutica', 'contextoHistoricoCultural', 'contextoLiterario', 'teologia'])
+    .nullable(),
+  index: z.number().int().nullable(),
+  text: z.string().nullable(),
+  word: reviewWordSchema.nullable(),
+  crossRef: reviewCrossRefSchema.nullable(),
+  reasonCode: z.string(),
+})
+type ReviewCorrection = z.infer<typeof reviewCorrectionSchema>
+
+const reviewResultSchema = z.object({
+  status: z.enum(['APPROVED', 'CORRECTED']),
+  corrections: z.array(reviewCorrectionSchema).max(80),
+})
+type ReviewResult = z.infer<typeof reviewResultSchema>
+
+/** Máximo de referências cruzadas (espelha o schema do módulo 6). */
+const MAX_CROSS_REFS = 20
+
+export interface ApplyCorrectionsResult {
+  ok: boolean
+  result?: VerseAnalysisResult
+  reason?: string
+}
+
+/**
+ * Aplica DETERMINISTICAMENTE as correções da revisão sobre uma CÓPIA do draft.
+ * Pura e testável: nunca faz I/O nem chama IA, e NUNCA muta o draft original.
+ *
+ * Segurança: valida cada patch (op conhecido, índices dentro do array, payload
+ * presente, seção permitida). Qualquer patch inválido aborta a aplicação inteira
+ * (`ok: false`) — o chamador mantém o draft intacto como NEEDS_REVIEW. Campos do
+ * sistema (reference/verseText/testament) são preservados do draft e jamais
+ * sobrescritos.
+ */
+export function applyReviewCorrections(
+  draft: VerseAnalysisResult,
+  corrections: ReviewCorrection[],
+): ApplyCorrectionsResult {
+  const clone: VerseAnalysisResult = JSON.parse(JSON.stringify(draft))
+  const words: WordAnalysisEntry[] = Array.isArray(clone.wordAnalysis) ? clone.wordAnalysis : []
+  const refs: CrossReference[] = Array.isArray(clone.referenciasCruzadas) ? clone.referenciasCruzadas : []
+
+  const sectionFields = new Set<string>(REVIEW_SECTION_FIELDS)
+  const wordRemovals = new Set<number>()
+  const refRemovals = new Set<number>()
+  const wordAdditions: WordAnalysisEntry[] = []
+  const refAdditions: CrossReference[] = []
+
+  const invalid = (reason: string): ApplyCorrectionsResult => ({ ok: false, reason })
+  const validIndex = (i: number | null, len: number) =>
+    i !== null && Number.isInteger(i) && i >= 0 && i < len
+
+  for (const c of corrections) {
+    switch (c.op) {
+      case 'setSection': {
+        if (!c.section || !sectionFields.has(c.section)) return invalid(`setSection: seção inválida (${c.section})`)
+        if (typeof c.text !== 'string' || c.text.trim().length === 0)
+          return invalid(`setSection: texto ausente para "${c.section}"`)
+        ;(clone as any)[c.section] = c.text
+        break
+      }
+      case 'replaceWord': {
+        if (!validIndex(c.index, words.length)) return invalid(`replaceWord: índice fora do intervalo (${c.index})`)
+        if (!c.word) return invalid(`replaceWord: dados da palavra ausentes (índice ${c.index})`)
+        words[c.index as number] = c.word
+        break
+      }
+      case 'addWord': {
+        if (!c.word) return invalid('addWord: dados da palavra ausentes')
+        wordAdditions.push(c.word)
+        break
+      }
+      case 'removeWord': {
+        if (!validIndex(c.index, words.length)) return invalid(`removeWord: índice fora do intervalo (${c.index})`)
+        wordRemovals.add(c.index as number)
+        break
+      }
+      case 'replaceCrossReference': {
+        if (!validIndex(c.index, refs.length)) return invalid(`replaceCrossReference: índice fora do intervalo (${c.index})`)
+        if (!c.crossRef) return invalid(`replaceCrossReference: dados ausentes (índice ${c.index})`)
+        refs[c.index as number] = c.crossRef
+        break
+      }
+      case 'addCrossReference': {
+        if (!c.crossRef) return invalid('addCrossReference: dados ausentes')
+        refAdditions.push(c.crossRef)
+        break
+      }
+      case 'removeCrossReference': {
+        if (!validIndex(c.index, refs.length)) return invalid(`removeCrossReference: índice fora do intervalo (${c.index})`)
+        refRemovals.add(c.index as number)
+        break
+      }
+      default:
+        return invalid(`operação desconhecida: ${(c as any).op}`)
+    }
+  }
+
+  // Índices sempre se referem ao DRAFT original: aplica replaces (já feitos in
+  // place), depois filtra remoções e por fim acrescenta as adições.
+  const finalWords = words.filter((_, i) => !wordRemovals.has(i)).concat(wordAdditions)
+  const finalRefs = refs.filter((_, i) => !refRemovals.has(i)).concat(refAdditions)
+
+  if (finalRefs.length > MAX_CROSS_REFS) {
+    return invalid(`referências cruzadas excedem o máximo de ${MAX_CROSS_REFS} após as correções (${finalRefs.length})`)
+  }
+
+  clone.wordAnalysis = finalWords
+  clone.referenciasCruzadas = finalRefs
+  // Campos protegidos: sempre os do draft (a IA nunca os sobrescreve).
+  clone.reference = draft.reference
+  clone.verseText = draft.verseText
+  clone.testament = draft.testament
+
+  return { ok: true, result: clone }
+}
+
+/**
+ * Prompt interno da 2ª etapa. A IA atua como AUDITOR + REVISOR + CORRETOR, mas em
+ * vez de reproduzir a análise inteira devolve APENAS os patches necessários
+ * (economia de tokens + evita truncamento). Rigoroso, porém enxuto.
+ */
+const reviewInstructions = `ETAPA DE REVISÃO CRÍTICA (AUDITOR + REVISOR + CORRETOR) — SAÍDA EM CORREÇÕES/PATCHES.
+
+Você recebeu uma ANÁLISE PRELIMINAR (DRAFT). Sua função NÃO é reescrever a análise inteira: é AUDITÁ-LA e devolver APENAS as CORREÇÕES necessárias. O backend aplicará as correções ao DRAFT de forma determinística e revalidará o resultado.
+
+ECONOMIA (IMPORTANTE): se, após auditar tudo, o DRAFT já estiver correto e bem calibrado, devolva status="APPROVED" e corrections=[] (vazio). NÃO reproduza conteúdo correto. Só gere correções para o que precisa mudar. Se houver erros, use status="CORRECTED" e liste apenas as correções.
+
+POSTURA: considere cada afirmação potencialmente falível. Preserve o correto. Corrija o incorreto. Remova o insustentável. Reduza a certeza de afirmações especulativas. Resolva contradições. NÃO invente informação para preencher lacunas.
+
+PRIORIDADE DA EVIDÊNCIA (nunca inverta): dados do sistema > texto bíblico > texto original > contexto > linguística > exegese > teologia bíblica > teologia sistemática > aplicação.
+
+AUDITE OBRIGATORIAMENTE: (1) texto original; (2) número/segmentação das palavras; (3) Strong; (4) lema; (5) transliteração; (6) morfologia; (7) sintaxe; (8) semântica; (9) tradução literal; (10) crítica textual; (11) variantes; (12) contexto imediato; (13) contexto literário; (14) contexto histórico-cultural; (15) intertextualidade; (16) referências cruzadas; (17) tipologia; (18) cumprimento profético; (19) exegese; (20) hermenêutica; (21) teologia bíblica; (22) teologia sistemática; (23) cristologia; (24) aplicação; (25) consistência entre TODAS as seções.
+
+PROCURE ESPECIALMENTE: Strong incorreto; artigo agrupado indevidamente ao Strong; palavra omitida; tradução literal artificial; erro morfológico; falácia lexical/etimológica; uso exagerado de tempo/aspecto verbal; leitura incorreta de anartros; uso incorreto da regra de Colwell; significado apenas possível apresentado como obrigatório; hipótese histórica apresentada como fato; manuscrito/variante inventada; falso consenso acadêmico; anacronismo; quiasmo inexistente; referência cruzada fraca classificada como paralelo; analogia classificada como tipologia; conexão temática classificada como cumprimento profético; teologia sistemática apresentada como significado gramatical; aplicação que não deriva da exegese; contradições entre seções.
+
+REGRA-CHAVE: uma conclusão teológica verdadeira pode estar apoiada num argumento linguístico incorreto — preserve a conclusão SOMENTE se houver fundamento adequado, mas CORRIJA o argumento. Não use doutrina para manipular a gramática. Perspectiva confessional pode ser respeitada nas seções teológicas, mas nunca deve determinar artificialmente o significado.
+
+CONFLITO COM DADO DO SISTEMA: se um dado confiável do sistema divergir do que a IA produziu, o dado do sistema prevalece (ex.: G3056 = λόγος, não "ὁ λόγος").
+
+COMO PRODUZIR CADA CORREÇÃO (deixe em null os campos não usados pelo op):
+- op="setSection": reescreve UMA seção inteira. section ∈ {exegese, hermeneutica, contextoHistoricoCultural, contextoLiterario, teologia}; text = novo conteúdo COMPLETO da seção (Markdown, pt-BR).
+- op="replaceWord": corrige uma entrada de wordAnalysis. index = posição 0-based no array wordAnalysis do DRAFT; word = a entrada corrigida COMPLETA {strongCode, originalWord, transliteration, meaning, contextAnalysis}.
+- op="addWord": adiciona palavra omitida. word = entrada completa.
+- op="removeWord": remove entrada incorreta. index = posição 0-based.
+- op="replaceCrossReference": corrige uma referência. index = posição 0-based em referenciasCruzadas; crossRef = {referencia, tipo ∈ {paralelo,alusao,tipologia,profecia}, descricao}.
+- op="addCrossReference": adiciona referência válida. crossRef = objeto completo.
+- op="removeCrossReference": remove referência fraca/incorreta. index = posição 0-based.
+- reasonCode: rótulo curto do motivo (ex.: LEXICAL_OVERCLAIM, OVERSTATEMENT, ANACHRONISM, WRONG_TYPOLOGY).
+
+ÍNDICES: referem-se SEMPRE às posições no DRAFT recebido (0-based, na ordem apresentada). Não encadeie índices já deslocados por outras correções. NÃO tente alterar reference, verseText ou testament (dados do sistema).
+
+Todo texto em português do Brasil (pt-BR). NÃO explique o processo de revisão nem revele raciocínio interno.`
+
+/** Deriva o contexto essencial (idioma/testamento + referência/texto) a partir do
+ *  rascunho — mantém a chamada de revisão enxuta, sem duplicar traduções. */
+function buildReviewContext(draft: VerseAnalysisResult) {
+  const testamentContext = `Este versículo pertence ao ${draft.testament === 'AT' ? 'Antigo' : 'Novo'} Testamento. O idioma original principal é ${draft.testament === 'AT' ? 'Hebraico/Aramaico' : 'Grego'}.`
+  const context = `<dados>\nReferência: ${promptData(draft.reference, 200)}\nTexto: ${promptData(draft.verseText, 5_000)}\n</dados>`
+  return { testamentContext, context }
+}
+
+/** Chamada de IA da revisão: envia o DRAFT + contexto essencial e recebe os
+ *  patches. `maxOutputTokens` folgado (16384) — como a saída são só correções,
+ *  fica muito abaixo do teto do modelo (65k) e não trunca. */
+async function callReviewAI(
+  model: any,
+  reporter: ProgressReporter,
+  draft: VerseAnalysisResult,
+): Promise<ReviewResult> {
+  const { testamentContext, context } = buildReviewContext(draft)
+  const draftForReview = {
+    wordAnalysis: draft.wordAnalysis,
+    exegese: draft.exegese,
+    hermeneutica: draft.hermeneutica,
+    contextoHistoricoCultural: draft.contextoHistoricoCultural,
+    contextoLiterario: draft.contextoLiterario,
+    teologia: draft.teologia,
+    referenciasCruzadas: draft.referenciasCruzadas,
+  }
+  const deterministicNote = `DADOS DETERMINÍSTICOS DO SISTEMA (prevalecem sobre a IA): idioma original = ${draft.testament === 'AT' ? 'Hebraico/Aramaico' : 'Grego'}; os códigos Strong devem usar o prefixo "${draft.testament === 'AT' ? 'H' : 'G'}" e o lema/original deve corresponder ao código; as referências cruzadas devem usar SOMENTE os 66 livros canônicos protestantes, no formato "Livro capítulo:versículo".`
+  const { object } = await safeGenerateObject(
+    {
+      model,
+      maxOutputTokens: 16384,
+      schema: reviewResultSchema,
+      prompt: `${globalRules}\n\n${testamentContext}\n\n${reviewInstructions}\n\n${context}\n\n${deterministicNote}\n\n<dados>\nANÁLISE PRELIMINAR (DRAFT) — os arrays wordAnalysis e referenciasCruzadas são indexados a partir de 0 na ordem apresentada:\n${promptData(JSON.stringify(draftForReview), 30_000)}\n</dados>`,
+    },
+    { reporter, label: 'Revisão e correção da análise' },
+  )
+  return object as ReviewResult
+}
+
+/**
+ * Orquestra a 2ª etapa: revisão (IA → patches) → aplicação determinística →
+ * validação completa → APPROVED/NEEDS_REVIEW. Reutilizada tanto no fim da geração
+ * quanto no RETRY de revisão sobre um draft já existente (sem regerar).
+ *
+ * Falhas nunca promovem o draft a APPROVED:
+ * - patch inválido        → NEEDS_REVIEW, draft intacto;
+ * - validação final falha → NEEDS_REVIEW com a versão corrigida (melhor esforço);
+ * - erro na chamada de IA → NEEDS_REVIEW, draft intacto (retryable depois).
+ */
+async function reviewAndFinalize(
+  model: any,
+  reporter: ProgressReporter,
+  draft: VerseAnalysisResult,
+): Promise<VerseAnalysisResult> {
+  reporter.step(90, 'reviewing', 'Revisando e auditando a análise…')
+  console.log('[AI_ANALYSIS] review started')
+  try {
+    const review = await callReviewAI(model, reporter, draft)
+    console.log(`[AI_ANALYSIS] review completed (status=${review.status}, correções=${review.corrections.length})`)
+
+    let candidate: VerseAnalysisResult
+    if (review.corrections.length === 0) {
+      // Nada a corrigir → FINAL = DRAFT (saída mínima de tokens).
+      candidate = { ...draft }
+    } else {
+      const applied = applyReviewCorrections(draft, review.corrections)
+      if (!applied.ok || !applied.result) {
+        console.warn(`[AI_ANALYSIS] patch application failed — draft mantido como NEEDS_REVIEW: ${applied.reason}`)
+        reporter.done('Análise concluída (requer revisão)')
+        return {
+          ...draft,
+          auditStatus: 'NEEDS_REVIEW',
+          auditDetails: `Correções da revisão inválidas: ${applied.reason ?? 'desconhecido'}`,
+        }
+      }
+      candidate = applied.result
+    }
+
+    // A versão candidata (draft + patches) passa pela MESMA validação
+    // determinística — a IA não pode burlar Strong/referências nem quebrar o app.
+    reporter.step(96, 'validation', 'Validando a versão revisada…')
+    const validation = await runDeterministicValidation(candidate)
+    if (validation.approved) {
+      console.log('[AI_ANALYSIS] validation passed')
+      reporter.done('Análise concluída e aprovada')
+      console.log('[AI_ANALYSIS] persisted (final aprovado)')
+      return { ...candidate, auditStatus: 'APPROVED', auditDetails: undefined }
+    }
+
+    console.log('[AI_ANALYSIS] validation failed (final requer revisão)', validation.issues)
+    reporter.done('Análise concluída (requer revisão)')
+    return {
+      ...candidate,
+      auditStatus: 'NEEDS_REVIEW',
+      auditDetails: 'Issues residuais após revisão: ' + JSON.stringify(validation.issues),
+    }
+  } catch (reviewError) {
+    console.error('[AI_ANALYSIS] review failed — mantendo o draft como NEEDS_REVIEW', reviewError)
+    reporter.done('Análise concluída (requer revisão)')
+    return {
+      ...draft,
+      auditStatus: 'NEEDS_REVIEW',
+      auditDetails: 'A etapa de revisão automática falhou; esta é a geração preliminar (não auditada na 2ª etapa).',
+    }
+  }
+}
+
+/**
+ * Executa SOMENTE a 2ª etapa (revisão) sobre um draft já existente — usado pela
+ * rota quando há um draft NEEDS_REVIEW no cache: reaproveita o draft e tenta
+ * novamente apenas a revisão, sem gastar uma nova geração.
+ */
+export async function runReviewPass(
+  draft: VerseAnalysisResult,
+  onProgress?: ProgressCallback,
+): Promise<VerseAnalysisResult> {
+  const model = getModel()
+  const reporter = createReporter(onProgress)
+  return reviewAndFinalize(model, reporter, draft)
+}
 
 export async function generateVerseAnalysis(
   verseRef: string,
@@ -492,21 +826,11 @@ Aprove (approved=true) se não houver erro factual, contradição cruzada nem ov
     }
   }
 
-  // Final check if deterministic validation failed both times
-  if (finalData.auditStatus === 'NEEDS_REVIEW') {
-    const lastCheck = await runDeterministicValidation(finalData);
-    if (!lastCheck.approved) {
-      finalData.auditDetails = "Issues residuais: " + JSON.stringify(lastCheck.issues);
-    } else {
-      finalData.auditStatus = 'APPROVED';
-    }
-  }
-
-  reporter.done(
-    finalData.auditStatus === 'APPROVED'
-      ? 'Análise concluída e aprovada'
-      : 'Análise concluída (requer revisão)',
-  );
-  console.log('[Pipeline] FINISHED WITH STATUS:', finalData.auditStatus);
-  return finalData;
+  // `finalData` é o DRAFT_ANALYSIS (geração primária + auditorias de módulo/global
+  // + validação determinística). Ele AINDA NÃO é a versão final: passa pela 2ª
+  // etapa (revisão por patches) — UMA chamada de IA que devolve apenas as
+  // correções, o backend as aplica ao draft de forma determinística e revalida o
+  // resultado. O status "Aprovado" só pode surgir DEPOIS desta etapa.
+  console.log('[AI_ANALYSIS] generation completed (draft ready)');
+  return reviewAndFinalize(model, reporter, finalData);
 }

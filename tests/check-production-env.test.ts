@@ -12,6 +12,9 @@ const validProductionEnv: NodeJS.ProcessEnv = {
   UPSTASH_REDIS_REST_URL: 'https://redis.example.invalid',
   UPSTASH_REDIS_REST_TOKEN: 'ci-placeholder', // gitleaks:allow
   CRON_SECRET: 'fake-32-char-cron-secret-for-test!', // gitleaks:allow
+  FIREBASE_PROJECT_ID: 'ci-project',
+  FIREBASE_CLIENT_EMAIL: 'ci@example.invalid',
+  FIREBASE_PRIVATE_KEY: '-----BEGIN PRIVATE KEY-----\nci-placeholder\n-----END PRIVATE KEY-----\n', // gitleaks:allow
 }
 
 /** Clona a base de produção removendo as chaves indicadas (sem variáveis órfãs). */

@@ -66,6 +66,7 @@ export type AnalysisPhase =
   | 'module'
   | 'audit'
   | 'validation'
+  | 'reviewing'
   | 'rate-limit'
   | 'done'
   | 'error'
